@@ -10,6 +10,8 @@ Run after extract.py:
     python src/transform.py
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import sqlite3
@@ -409,7 +411,7 @@ def build_transformed_deals(conn: sqlite3.Connection):
 
         conn.execute("""
             INSERT INTO deals_transformed
-            SELECT *,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+            SELECT *,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
             FROM deals_snapshot WHERE snapshot_id = ?
         """, (
             stall["lmsd"],

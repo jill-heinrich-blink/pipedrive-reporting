@@ -12,6 +12,13 @@ import os
 import sys
 from pathlib import Path
 
+# Load .env file if present (so PIPEDRIVE_API_TOKEN is set automatically)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass  # dotenv not installed — rely on environment variable
+
 sys.path.insert(0, str(Path(__file__).parent))
 import extract
 import transform
