@@ -80,17 +80,31 @@
   },
 
   "stall_thresholds": {
-    "_comment": "Days before a deal is considered stalling — no-activity and stage-unchanged thresholds by pipeline and stage order",
+    "_comment": "no_signal = days before LMSD absence triggers stall. stage_unchanged = amber threshold from won deal dwell data (mean + 1 SD). Calibrated Aug 2026.",
     "blink": {
-      "0": {"no_signal": 14, "stage_unchanged": 14},
-      "1": {"no_signal": 14, "stage_unchanged": 21},
-      "2": {"no_signal": 21, "stage_unchanged": 30},
-      "3": {"no_signal": 14, "stage_unchanged": 14},
-      "4": {"no_signal": 21, "stage_unchanged": 30},
-      "5": {"no_signal": 14, "stage_unchanged": 14, "close_date_required": true}
+      "0": {"no_signal": 14, "stage_unchanged": 326},
+      "1": {"no_signal": 14, "stage_unchanged": 28},
+      "2": {"no_signal": 21, "stage_unchanged": 38},
+      "3": {"no_signal": 14, "stage_unchanged": 46},
+      "4": {"no_signal": 21, "stage_unchanged": 44},
+      "5": {"no_signal": 14, "stage_unchanged": 357, "close_date_required": true}
     },
-    "synergy":        "mirror_blink",
-    "insight_space":  "mirror_blink",
+    "synergy": {
+      "0": {"no_signal": 14, "stage_unchanged": 16},
+      "1": {"no_signal": 14, "stage_unchanged": 38},
+      "2": {"no_signal": 21, "stage_unchanged": 56},
+      "3": {"no_signal": 14, "stage_unchanged": 32},
+      "4": {"no_signal": 21, "stage_unchanged": 121},
+      "5": {"no_signal": 14, "stage_unchanged": 51, "close_date_required": true}
+    },
+    "insight_space": {
+      "0": {"no_signal": 14, "stage_unchanged": 326},
+      "1": {"no_signal": 14, "stage_unchanged": 28},
+      "2": {"no_signal": 21, "stage_unchanged": 138},
+      "3": {"no_signal": 14, "stage_unchanged": 34},
+      "4": {"no_signal": 21, "stage_unchanged": 158},
+      "5": {"no_signal": 14, "stage_unchanged": 357, "close_date_required": true}
+    },
     "pre_sales": {
       "0": {"no_signal": 7,  "stage_unchanged": null},
       "1": {"no_signal": 7,  "stage_unchanged": null},
@@ -99,6 +113,34 @@
       "4": {"no_signal": 10, "stage_unchanged": null},
       "5": {"no_signal": 7,  "stage_unchanged": null},
       "6": {"no_signal": 7,  "stage_unchanged": null}
+    }
+  },
+
+  "stage_dwell_thresholds": {
+    "_comment": "Traffic light thresholds derived from won deal stage dwell times (full extraction Aug 2026). amber = mean + 1 SD, red = mean + 2 SD. Stages with n < 5 fall back to Blink values.",
+    "blink": {
+      "0": {"mean": 178, "amber": 326, "red": 474, "n": 23,  "note": "small n — treat as provisional"},
+      "1": {"mean":   6, "amber":  28, "red":  50, "n": 326},
+      "2": {"mean":  10, "amber":  38, "red":  66, "n": 411},
+      "3": {"mean":  11, "amber":  46, "red":  81, "n": 571},
+      "4": {"mean":  11, "amber":  44, "red":  77, "n": 634},
+      "5": {"mean": 216, "amber": 357, "red": 498, "n": 136}
+    },
+    "synergy": {
+      "0": {"mean":   6, "amber":  16, "red":  26, "n":   7, "note": "small n — treat as provisional"},
+      "1": {"mean":  16, "amber":  38, "red":  60, "n":  15},
+      "2": {"mean":  21, "amber":  56, "red":  91, "n":  31},
+      "3": {"mean":  14, "amber":  32, "red":  50, "n":  47},
+      "4": {"mean":  29, "amber": 121, "red": 213, "n":  42},
+      "5": {"mean":  29, "amber":  51, "red":  73, "n":   5, "note": "small n — treat as provisional"}
+    },
+    "insight_space": {
+      "0": {"mean": 178, "amber": 326, "red": 474, "n":   3, "note": "fallback to Blink (n too small)"},
+      "1": {"mean":   6, "amber":  28, "red":  50, "n":   1, "note": "fallback to Blink (n too small)"},
+      "2": {"mean":  45, "amber": 138, "red": 231, "n":   6, "note": "small n — treat as provisional"},
+      "3": {"mean":  15, "amber":  34, "red":  53, "n":  10},
+      "4": {"mean":  42, "amber": 158, "red": 274, "n":  16},
+      "5": {"mean": 216, "amber": 357, "red": 498, "n":   2, "note": "fallback to Blink (n too small)"}
     }
   }
 }

@@ -72,6 +72,7 @@ def export_pipeline_health(conn):
             t.expected_close_date,
             t.stage_change_time,
             t.days_in_stage,
+            t.stage_dwell_status,
             CASE
                 WHEN t.days_in_stage IS NULL   THEN 'Unknown'
                 WHEN t.days_in_stage <= 30     THEN '0-30 days'
@@ -114,6 +115,7 @@ def export_stalling_deals(conn):
             t.last_outgoing_mail_time,
             t.last_incoming_mail_time,
             t.days_in_stage,
+            t.stage_dwell_status,
             t.expected_close_date,
             t.days_until_close,
             t.undone_activities_count,

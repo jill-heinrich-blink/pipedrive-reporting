@@ -36,47 +36,53 @@ def main():
     parser = argparse.ArgumentParser(description="Run full Pipedrive ETL pipeline")
     parser.add_argument("--mode", choices=["full", "incremental", "snapshot"],
                         default="incremental")
+    parser.add_argument("--skip-extract", action="store_true",
+                        help="Skip API extraction and re-run only transform + load against existing DB")
     parser.add_argument("--token", help="Pipedrive API token (or set PIPEDRIVE_API_TOKEN env var)")
     args = parser.parse_args()
 
-    api_token = args.token or os.environ.get("PIPEDRIVE_API_TOKEN")
-    if not api_token:
-        log.error("No API token. Set PIPEDRIVE_API_TOKEN env var or pass --token")
-        sys.exit(1)
+    if args.skip_extract:
+        log.info("Skipping extraction — re-running transform + load against existing DB")
+        conn = extract.get_conn()
+    else:
+        api_token = args.token or os.environ.get("PIPEDRIVE_API_TOKEN")
+        if not api_token:
+            log.error("No API token. Set PIPEDRIVE_API_TOKEN env var or pass --token")
+            sys.exit(1)
 
-    log.info(f"Starting ETL pipeline — mode: {args.mode}")
+        log.info(f"Starting ETL pipeline — mode: {args.mode}")
 
-    # 1. Extract
-    client = extract.PipedriveClient(api_token)
-    conn   = extract.get_conn()
-    extract.init_db(conn)
-    from datetime import datetime, timezone
-    started_at = datetime.now(timezone.utc).isoformat()
-    run_id = conn.execute(
-        "INSERT INTO extraction_runs (started_at, mode) VALUES (?,?)",
-        (started_at, args.mode)
-    ).lastrowid
-    conn.commit()
-
-    try:
-        if args.mode == "full":
-            stats = extract.run_full(client, conn)
-        elif args.mode == "snapshot":
-            stats = extract.run_snapshot(client, conn)
-        else:
-            stats = extract.run_incremental(client, conn)
-
-        finished_at = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            "UPDATE extraction_runs SET finished_at=?, deals_fetched=?, changelogs_fetched=?, status='completed' WHERE run_id=?",
-            (finished_at, stats["deals"], stats["changelogs"], run_id)
-        )
+        # 1. Extract
+        client = extract.PipedriveClient(api_token)
+        conn   = extract.get_conn()
+        extract.init_db(conn)
+        from datetime import datetime, timezone
+        started_at = datetime.now(timezone.utc).isoformat()
+        run_id = conn.execute(
+            "INSERT INTO extraction_runs (started_at, mode) VALUES (?,?)",
+            (started_at, args.mode)
+        ).lastrowid
         conn.commit()
-    except Exception as e:
-        conn.execute("UPDATE extraction_runs SET status='failed', notes=? WHERE run_id=?",
-                     (str(e), run_id))
-        conn.commit()
-        raise
+
+        try:
+            if args.mode == "full":
+                stats = extract.run_full(client, conn)
+            elif args.mode == "snapshot":
+                stats = extract.run_snapshot(client, conn)
+            else:
+                stats = extract.run_incremental(client, conn)
+
+            finished_at = datetime.now(timezone.utc).isoformat()
+            conn.execute(
+                "UPDATE extraction_runs SET finished_at=?, deals_fetched=?, changelogs_fetched=?, status='completed' WHERE run_id=?",
+                (finished_at, stats["deals"], stats["changelogs"], run_id)
+            )
+            conn.commit()
+        except Exception as e:
+            conn.execute("UPDATE extraction_runs SET status='failed', notes=? WHERE run_id=?",
+                         (str(e), run_id))
+            conn.commit()
+            raise
 
     # 2. Transform
     transform.build_stage_history(conn)

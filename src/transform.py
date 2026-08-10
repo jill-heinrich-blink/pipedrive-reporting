@@ -26,9 +26,10 @@ DB_PATH    = DATA_DIR / "pipedrive.db"
 with open(CONFIG_DIR / "fields.json") as f:
     FIELDS = json.load(f)
 
-THRESHOLDS  = FIELDS["stall_thresholds"]
-PIPELINE_IDS = FIELDS["pipelines"]          # name → id
-STAGE_MAP    = FIELDS["stages"]             # pipeline_name → {stage_key → stage_id}
+THRESHOLDS       = FIELDS["stall_thresholds"]
+DWELL_THRESHOLDS = FIELDS["stage_dwell_thresholds"]
+PIPELINE_IDS     = FIELDS["pipelines"]      # name → id
+STAGE_MAP        = FIELDS["stages"]         # pipeline_name → {stage_key → stage_id}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,11 +48,13 @@ def get_conn() -> sqlite3.Connection:
 
 
 def days_since(date_str: str) -> int | None:
-    """Return number of days since a date string (ISO format). None if blank."""
+    """Return number of days since a date string (ISO format). None if blank or invalid."""
     if not date_str:
         return None
     try:
         d = datetime.fromisoformat(date_str.replace("Z", "+00:00")).date()
+        if d.year < 1900:
+            return None
         return (date.today() - d).days
     except (ValueError, TypeError):
         return None
@@ -83,6 +86,31 @@ def stage_order_for_id(stage_id: int) -> int | None:
             if sid == stage_id:
                 return order
     return None
+
+
+def get_stage_dwell_thresholds(pipeline_id: int, stage_order: int) -> dict:
+    """Return {amber, red} for stage traffic light. Falls back to Blink if pipeline unknown."""
+    pname = pipeline_name_for_id(pipeline_id)
+    if not pname or pname == "pre_sales":
+        pname = "blink"
+    t = DWELL_THRESHOLDS.get(pname, DWELL_THRESHOLDS["blink"])
+    stage_t = t.get(str(stage_order), t.get("1", {}))
+    return {
+        "amber": stage_t.get("amber", 30),
+        "red":   stage_t.get("red",   60),
+    }
+
+
+def compute_stage_dwell_status(days_in_stage: int | None, pipeline_id: int, stage_order: int) -> str:
+    """Return Healthy / Watch / Critical based on won-deal dwell benchmarks."""
+    if days_in_stage is None:
+        return "Unknown"
+    t = get_stage_dwell_thresholds(pipeline_id, stage_order)
+    if days_in_stage > t["red"]:
+        return "Critical"
+    if days_in_stage > t["amber"]:
+        return "Watch"
+    return "Healthy"
 
 
 def get_thresholds(pipeline_id: int, stage_order: int) -> dict:
@@ -121,10 +149,13 @@ def compute_stall_signals(row: sqlite3.Row) -> dict:
     )
     days_since_signal  = days_since(lmsd)
     days_in_stage      = days_since(row["stage_change_time"])
-    days_until_close   = (
-        (datetime.fromisoformat(row["expected_close_date"]).date() - date.today()).days
-        if row["expected_close_date"] else None
-    )
+    try:
+        days_until_close = (
+            (datetime.fromisoformat(row["expected_close_date"]).date() - date.today()).days
+            if row["expected_close_date"] else None
+        )
+    except (ValueError, TypeError):
+        days_until_close = None
 
     # ── Individual signals ───────────────────────────────────────────────────
     no_signal = (
@@ -383,6 +414,7 @@ def build_transformed_deals(conn: sqlite3.Connection):
         ("signal_committed_no_close", "INTEGER"),
         ("signal_close_overdue", "INTEGER"),
         ("signal_low_prob_dark", "INTEGER"),
+        ("stage_dwell_status", "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE deals_transformed ADD COLUMN {col} {typ}")
@@ -405,13 +437,15 @@ def build_transformed_deals(conn: sqlite3.Connection):
 
     log.info(f"  Transforming {len(snapshots)} deals...")
     for row in snapshots:
-        stall  = compute_stall_signals(row)
-        seg    = compute_engagement_segment(row) if row["status"] == "open" else None
-        rr     = compute_rate_realisation(row)
+        stall        = compute_stall_signals(row)
+        seg          = compute_engagement_segment(row) if row["status"] == "open" else None
+        rr           = compute_rate_realisation(row)
+        stage_order  = stage_order_for_id(row["stage_id"]) or 0
+        dwell_status = compute_stage_dwell_status(stall["days_in_stage"], row["pipeline_id"], stage_order)
 
         conn.execute("""
             INSERT INTO deals_transformed
-            SELECT *,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+            SELECT *,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
             FROM deals_snapshot WHERE snapshot_id = ?
         """, (
             stall["lmsd"],
@@ -433,6 +467,7 @@ def build_transformed_deals(conn: sqlite3.Connection):
             1 if stall["signal_committed_no_close"] else 0,
             1 if stall["signal_close_overdue"] else 0,
             1 if stall["signal_low_prob_dark"] else 0,
+            dwell_status,
             row["snapshot_id"],
         ))
 
