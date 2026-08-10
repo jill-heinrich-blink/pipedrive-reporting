@@ -1,0 +1,104 @@
+{
+  "_comment": "Pipedrive field key mappings for Blink / Mphasis instance — verified August 2026",
+
+  "pipelines": {
+    "insight_space": 2,
+    "synergy": 7,
+    "blink": 8,
+    "pre_sales": 10
+  },
+
+  "stages": {
+    "insight_space": {
+      "0_lead":           8,
+      "1_prospect":       9,
+      "2_qualified":      10,
+      "3_proposal":       11,
+      "4_negotiation":    12,
+      "5_committed":      18
+    },
+    "synergy": {
+      "0_lead":           38,
+      "1_prospect":       39,
+      "2_qualified":      40,
+      "3_proposal":       41,
+      "4_negotiation":    42,
+      "5_committed":      43
+    },
+    "blink": {
+      "0_lead":           44,
+      "1_prospect":       45,
+      "2_qualified":      46,
+      "3_proposal":       47,
+      "4_negotiation":    48,
+      "5_committed":      49
+    },
+    "pre_sales": {
+      "contact_identified":       51,
+      "outbound_initiated":        52,
+      "engaged":                   53,
+      "meeting_scheduled":         54,
+      "pre_qual":                  55,
+      "disqual_recycled":          56,
+      "accepted_move_to_pipeline": 58
+    }
+  },
+
+  "custom_fields": {
+    "rph_sold":                     "96bbafc8a89f547e915d813c8970fb3e5fcc562c",
+    "price_to_client":              "7e484e64e38024eee4d27262c401f55632687df5",
+    "deal_outreach_tag":            "22a97166793508a34f2cf54adf9257b62c17d102",
+    "outbound_meeting_date":        "1605bb3cf814cf7684c34687d2d7c5de38b859d7",
+    "touch_type":                   "2ce6736d5b183e30d41aadd7deb2aad8983d08c0",
+    "buying_authority":             "abe0da5d95f0cfa68ae4b358622e150d4da4a796",
+    "client_evaluation_criteria":   "9f6ad26f1b443afa324727afb2fd7fb6a13e7374",
+    "solution_fit":                 "2460a2af7dcb68995baf23ce83d47dfd0fb048de",
+    "position_to_win":              "0568f79c151eb7a2a6405e22d2b9748766723104",
+    "client_decision_timeline":     "1f0a4a989000c604312e82f743fb44512e7bfe36",
+    "disqualification_reason":      "dcf7fb6a521d610516dc8e26b426123a22e4d77d",
+    "disqualification_details":     "c47b088333ae2bc0398f27fa5dcb526033da7896",
+    "re_engagement_eligible":       "6a969918f3cc3b6038286b718db71282f68d8c64",
+    "re_engagement_ineligible_why": "17aab7ecc92ce4ac526794a54ffd5fd626fc5c0b",
+    "estimated_start_date":         "5af805aa74fce935b6fa079d2000ddfd587d78b7",
+    "duration_weeks":               "cc6b82397dfa43fadda41292aefcea9b9468d4c9",
+    "is_start_negotiable":          "913a88a5c5924bd1461501ea3b73aded9badeba6",
+    "project_type":                 "2cb388622d4a247cf7f601668cca649c4b53cf0e",
+    "service_type":                 "e0464989d54f76bdfba229623c7543b24cd284b6",
+    "business_unit":                "5d8f4070d9d1080dd860a9316f75eda94d4c4ff3",
+    "last_activity_stage":          "5ab88d95a993d5016302a896394c11cf04791eb1",
+    "industry":                     "6fd235fcb28f406f0f393ed536acdf8ae536c885",
+    "deal_type":                    "7c793458090bfe251fc5aba65fdf07d46da44a76",
+    "study_type":                   "80817eb9b814da5dc293ee962c02095afe1b1789",
+    "contract_type":                "09f115f4db8bb221f34882777f33b8a5a37ce061",
+    "rfp":                          "cee85e24037d74eae0948ccf2a6ac981f513b78f",
+    "has_discount":                 "67d87c7882f22c46cf87378c2653a332c6073996",
+    "right_fit_for_blink":          "67988cd3f386c6441c9bfc08bba60166eafadb14",
+    "mphasis_engineering":          "38645b6cb95a69f926dc16ac72951c12be80642a",
+    "mphasis_engineering_value":    "2331fcdab6379b93d6a6c3bb543d31b748c72707",
+    "lead_source":                  "daa5018d60fa8dab36d441dd62499cd5d5bbec72",
+    "resourcing_label":             "6d8379adbb924d018d2bd7d1dd76b7caacded751"
+  },
+
+  "stall_thresholds": {
+    "_comment": "Days before a deal is considered stalling — no-activity and stage-unchanged thresholds by pipeline and stage order",
+    "blink": {
+      "0": {"no_signal": 14, "stage_unchanged": 14},
+      "1": {"no_signal": 14, "stage_unchanged": 21},
+      "2": {"no_signal": 21, "stage_unchanged": 30},
+      "3": {"no_signal": 14, "stage_unchanged": 14},
+      "4": {"no_signal": 21, "stage_unchanged": 30},
+      "5": {"no_signal": 14, "stage_unchanged": 14, "close_date_required": true}
+    },
+    "synergy":        "mirror_blink",
+    "insight_space":  "mirror_blink",
+    "pre_sales": {
+      "0": {"no_signal": 7,  "stage_unchanged": null},
+      "1": {"no_signal": 7,  "stage_unchanged": null},
+      "2": {"no_signal": 7,  "stage_unchanged": null},
+      "3": {"no_signal": 5,  "stage_unchanged": null},
+      "4": {"no_signal": 10, "stage_unchanged": null},
+      "5": {"no_signal": 7,  "stage_unchanged": null},
+      "6": {"no_signal": 7,  "stage_unchanged": null}
+    }
+  }
+}

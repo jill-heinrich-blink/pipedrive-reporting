@@ -1,0 +1,29 @@
+# Secrets — never commit your API token
+.env
+*.env
+
+# Database and data files — too large / sensitive for version control
+data/pipedrive.db
+data/exports/
+data/*.csv
+
+# Keep the data directory itself
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
