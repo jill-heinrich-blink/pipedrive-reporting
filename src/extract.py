@@ -138,6 +138,10 @@ class PipedriveClient:
     def fetch_users(self) -> list:
         return self.get_v1_paginated(f"{API_BASE}/v1/users")
 
+    def fetch_deal_fields(self) -> list:
+        """Fetch all deal field definitions (for option label lookups)."""
+        return self.get_v1_paginated(f"{API_BASE}/v1/dealFields")
+
     # ── Deals ─────────────────────────────────────────────────────────────────
 
     def fetch_deals(self, status: str = "open", updated_after: str = None) -> list:
@@ -217,6 +221,16 @@ def init_db(conn: sqlite3.Connection):
         name          TEXT,
         email         TEXT,
         updated_at    TEXT
+    );
+
+    -- Option label lookup for dropdown custom fields (option_id → label)
+    CREATE TABLE IF NOT EXISTS dim_field_options (
+        field_key     TEXT NOT NULL,
+        field_name    TEXT,
+        option_id     INTEGER NOT NULL,
+        option_label  TEXT,
+        updated_at    TEXT,
+        PRIMARY KEY (field_key, option_id)
     );
 
     -- Deal snapshots (append-only — one row per deal per extraction run)
@@ -339,6 +353,27 @@ def upsert_stages(conn, stages: list):
     conn.commit()
 
 
+def upsert_field_options(conn, deal_fields: list):
+    """Store option ID → label mappings for all dropdown/enum custom fields."""
+    now = datetime.now(timezone.utc).isoformat()
+    rows = []
+    for field in deal_fields:
+        key  = field.get("key")
+        name = field.get("name")
+        options = field.get("options") or []
+        for opt in options:
+            rows.append((key, name, opt.get("id"), opt.get("label"), now))
+    if rows:
+        conn.executemany(
+            """INSERT OR REPLACE INTO dim_field_options
+               (field_key, field_name, option_id, option_label, updated_at)
+               VALUES (?,?,?,?,?)""",
+            rows
+        )
+        conn.commit()
+        log.info(f"  Field options: {len(rows)} option labels stored")
+
+
 def upsert_users(conn, users: list):
     now = datetime.now(timezone.utc).isoformat()
     conn.executemany(
@@ -349,8 +384,25 @@ def upsert_users(conn, users: list):
 
 
 def _cf(deal: dict, key: str):
-    """Safely retrieve a custom field value from a deal dict."""
-    return deal.get(key)
+    """Safely retrieve a custom field value from a deal dict.
+    Pipedrive API v2 nests custom fields under deal['custom_fields'].
+    Coerces unsupported types so sqlite3 never sees a dict or list.
+    """
+    custom = deal.get("custom_fields")
+    if isinstance(custom, dict):
+        val = custom.get(key)
+    else:
+        val = deal.get(key)  # fallback for v1-style flat responses
+
+    # Monetary fields come back as {"amount": X, "currency": "Y"}
+    if isinstance(val, dict):
+        return val.get("amount")
+
+    # Multi-select fields come back as a list of option IDs
+    if isinstance(val, list):
+        return ",".join(str(v) for v in val) if val else None
+
+    return val
 
 
 def insert_deal_snapshot(conn, deal: dict, extracted_at: str):
@@ -381,10 +433,12 @@ def insert_deal_snapshot(conn, deal: dict, extracted_at: str):
         deal.get("status"),
         deal.get("pipeline_id") or (deal.get("pipeline") if isinstance(deal.get("pipeline"), int) else None),
         deal.get("stage_id"),
-        (deal.get("user_id") or {}).get("id") if isinstance(deal.get("user_id"), dict) else deal.get("user_id"),
+        deal.get("owner_id") or ((deal.get("user_id") or {}).get("id") if isinstance(deal.get("user_id"), dict) else deal.get("user_id")),
         (deal.get("creator_user_id") or {}).get("id") if isinstance(deal.get("creator_user_id"), dict) else deal.get("creator_user_id"),
         deal.get("value"),
-        deal.get("weighted_value"),
+        # v2 doesn't return weighted_value — calculate from value × probability
+        (deal.get("value") or 0) * (deal.get("probability") or 0) / 100
+        if deal.get("value") is not None else None,
         deal.get("currency"),
         deal.get("probability"),
         deal.get("expected_close_date"),
@@ -510,6 +564,7 @@ def run_full(client: PipedriveClient, conn: sqlite3.Connection) -> dict:
     upsert_pipelines(conn, client.fetch_pipelines())
     upsert_stages(conn, client.fetch_stages())
     upsert_users(conn, client.fetch_users())
+    upsert_field_options(conn, client.fetch_deal_fields())
 
     # Deals
     all_deals = []

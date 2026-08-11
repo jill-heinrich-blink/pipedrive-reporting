@@ -47,6 +47,29 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
+def build_option_lookup(conn: sqlite3.Connection) -> dict:
+    """Returns {field_key: {option_id: label}} from dim_field_options."""
+    lookup: dict = {}
+    try:
+        rows = conn.execute("SELECT field_key, option_id, option_label FROM dim_field_options").fetchall()
+        for r in rows:
+            lookup.setdefault(r["field_key"], {})[r["option_id"]] = r["option_label"]
+    except Exception:
+        pass  # table may not exist in older DBs
+    return lookup
+
+
+def resolve_option(value, field_key: str, option_lookup: dict) -> str | None:
+    """Convert a numeric option ID to its human-readable label."""
+    if value is None:
+        return None
+    try:
+        int_val = int(float(value))
+        return option_lookup.get(field_key, {}).get(int_val, str(value))
+    except (ValueError, TypeError):
+        return str(value)  # already a string label
+
+
 def days_since(date_str: str) -> int | None:
     """Return number of days since a date string (ISO format). None if blank or invalid."""
     if not date_str:
@@ -473,6 +496,54 @@ def build_transformed_deals(conn: sqlite3.Connection):
 
     conn.commit()
     log.info(f"  deals_transformed built: {len(snapshots)} rows")
+
+    # Resolve dropdown option IDs → human-readable labels
+    # Each entry: (column_name, api_field_key from fields.json custom_fields)
+    DROPDOWN_FIELDS = [
+        ("rfp",                    "cee85e24037d74eae0948ccf2a6ac981f513b78f"),
+        ("service_type",           "e0464989d54f76bdfba229623c7543b24cd284b6"),
+        ("project_type",           "2cb388622d4a247cf7f601668cca649c4b53cf0e"),
+        ("industry",               "6fd235fcb28f406f0f393ed536acdf8ae536c885"),
+        ("deal_type",              "7c793458090bfe251fc5aba65fdf07d46da44a76"),
+        ("contract_type",          "09f115f4db8bb221f34882777f33b8a5a37ce061"),
+        ("position_to_win",        "0568f79c151eb7a2a6405e22d2b9748766723104"),
+        ("touch_type",             "2ce6736d5b183e30d41aadd7deb2aad8983d08c0"),
+        ("re_engagement_eligible", "6a969918f3cc3b6038286b718db71282f68d8c64"),
+        ("has_discount",           "67d87c7882f22c46cf87378c2653a332c6073996"),
+        ("right_fit_for_blink",    "67988cd3f386c6441c9bfc08bba60166eafadb14"),
+        ("mphasis_engineering",    "38645b6cb95a69f926dc16ac72951c12be80642a"),
+        ("lead_source",            "daa5018d60fa8dab36d441dd62499cd5d5bbec72"),
+        ("resourcing_label",       "6d8379adbb924d018d2bd7d1dd76b7caacded751"),
+        ("deal_outreach_tag",      "22a97166793508a34f2cf54adf9257b62c17d102"),
+        ("disqualification_reason","dcf7fb6a521d610516dc8e26b426123a22e4d77d"),
+    ]
+    log.info("  Resolving dropdown option IDs to labels...")
+    resolved = 0
+    for col, field_key in DROPDOWN_FIELDS:
+        try:
+            cur = conn.execute(f"""
+                UPDATE deals_transformed
+                SET {col} = (
+                    SELECT option_label
+                    FROM dim_field_options
+                    WHERE field_key = ?
+                      AND option_id = CAST({col} AS INTEGER)
+                )
+                WHERE {col} IS NOT NULL
+                  AND {col} GLOB '[0-9]*'
+                  AND EXISTS (
+                      SELECT 1 FROM dim_field_options
+                      WHERE field_key = ?
+                        AND option_id = CAST({col} AS INTEGER)
+                  )
+            """, (field_key, field_key))
+            if cur.rowcount:
+                log.info(f"    {col}: resolved {cur.rowcount} rows")
+                resolved += cur.rowcount
+        except Exception as e:
+            log.warning(f"    Could not resolve {col}: {e}")
+    conn.commit()
+    log.info(f"  Dropdown resolution complete — {resolved} values resolved across {len(DROPDOWN_FIELDS)} fields")
 
     # Summary counts
     stalling = conn.execute(

@@ -83,6 +83,8 @@ def export_pipeline_health(conn):
             t.lmsd,
             t.days_since_signal,
             t.add_time,
+            t.rfp,
+            t.service_type,
             t.industry,
             t.project_type,
             t.contract_type,
