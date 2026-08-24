@@ -4,8 +4,13 @@
 
 # Database and data files — too large / sensitive for version control
 data/pipedrive.db
+data/pipedrive.db-wal
+data/pipedrive.db-shm
 data/exports/
 data/*.csv
+
+# FUSE mount artifacts (temp files created by the sandboxed filesystem bridge)
+data/.fuse_hidden*
 
 # Keep the data directory itself
 !data/.gitkeep
