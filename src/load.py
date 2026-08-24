@@ -491,19 +491,6 @@ def export_owner_goals(conn):
               AND p.label = ? AND s.name = 'Engaged'
         """, (owner_id, label_filter)).fetchone()[0]
 
-        won_accounts = conn.execute("""
-            SELECT COUNT(DISTINCT org_id) FROM deals_transformed
-            WHERE owner_id = ? AND status = 'won' AND org_id IS NOT NULL
-              AND date(won_time) BETWEEN date(?) AND date(?)
-        """, (owner_id, q_start, q_end)).fetchone()[0]
-
-        open_pipeline_accounts = conn.execute(f"""
-            SELECT COUNT(DISTINCT org_id) FROM deals_transformed
-            WHERE owner_id = ? AND status = 'open' AND org_id IS NOT NULL
-              AND stage_id NOT IN ({stage_zero_clause})
-              AND pipeline_id IN (2, 7, 8)
-        """, (owner_id,)).fetchone()[0]
-
         elevated_mtg = conn.execute("""
             SELECT COUNT(*) FROM deals_transformed t
             JOIN dim_persons p ON t.person_id = p.person_id
@@ -533,8 +520,6 @@ def export_owner_goals(conn):
             "open_deals_no_close_date_count": no_close_date,
             "open_deals_no_person_count": no_person,
             "open_deals_stage_zero_count": stage_zero_count,
-            "won_accounts_count": won_accounts,
-            "open_pipeline_accounts_count": open_pipeline_accounts,
             "reporting_tag_deal_count": tag_deals[0],
             "reporting_tag_deal_value": tag_deals[1],
             "elevated_buyer_engaged_count": elevated_engaged,
@@ -556,6 +541,62 @@ def export_owner_goals(conn):
         writer.writerows(rows)
     log.info(f"  09_owner_goals.csv: {len(rows)} rows → {path}")
     return len(rows)
+
+
+def export_account_coverage(conn):
+    """
+    Report 12: Account Coverage — Open Pipeline vs. Closed Sales by
+    Organization, across all owners configured in targets.json. One row
+    per (owner, organization) so the same org can appear more than once
+    if multiple reps touch it.
+    """
+    q_start = TARGETS["quarter_start"]
+    q_end   = TARGETS["quarter_end"]
+    stage_zero_ids = TARGETS["stage_zero_exclusion"]["stage_ids"]
+    stage_zero_clause = ",".join(str(s) for s in stage_zero_ids)
+    owner_ids = [int(k) for k in TARGETS["owners"] if not k.startswith("_")]
+    placeholders = ",".join("?" for _ in owner_ids)
+
+    rows = conn.execute(f"""
+        SELECT
+            t.owner_id,
+            COALESCE(o.name, '(no organization linked)') AS org_name,
+            t.org_id,
+            SUM(CASE WHEN t.status='won' AND date(t.won_time) BETWEEN date(?) AND date(?)
+                     THEN t.value ELSE 0 END) AS won_value,
+            SUM(CASE WHEN t.status='open' AND t.stage_id NOT IN ({stage_zero_clause})
+                       AND t.pipeline_id IN (2,7,8)
+                     THEN t.value ELSE 0 END) AS open_pipeline_value
+        FROM deals_transformed t
+        LEFT JOIN dim_organizations o ON t.org_id = o.org_id
+        WHERE t.owner_id IN ({placeholders})
+          AND t.org_id IS NOT NULL
+        GROUP BY t.owner_id, t.org_id
+        HAVING won_value > 0 OR open_pipeline_value > 0
+        ORDER BY t.owner_id, (won_value + open_pipeline_value) DESC
+    """, (q_start, q_end, *owner_ids)).fetchall()
+
+    out_rows = []
+    for r in rows:
+        owner_cfg = TARGETS["owners"].get(str(r["owner_id"]), {})
+        out_rows.append({
+            "owner_name": owner_cfg.get("name", str(r["owner_id"])),
+            "org_name": r["org_name"],
+            "org_id": r["org_id"],
+            "won_value": r["won_value"],
+            "open_pipeline_value": r["open_pipeline_value"],
+        })
+
+    if not out_rows:
+        log.warning("  12_account_coverage.csv: no rows")
+        return 0
+    path = EXPORT_DIR / "12_account_coverage.csv"
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=out_rows[0].keys())
+        writer.writeheader()
+        writer.writerows(out_rows)
+    log.info(f"  12_account_coverage.csv: {len(out_rows)} rows → {path}")
+    return len(out_rows)
 
 
 def export_reporting_tag_detail(conn):
@@ -638,6 +679,7 @@ def main():
     export_commercial_fit(conn)
     export_forecast_confidence(conn)
     export_owner_goals(conn)
+    export_account_coverage(conn)
     export_reporting_tag_detail(conn)
     export_elevated_buyer_detail(conn)
     export_metadata(conn)

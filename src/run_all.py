@@ -100,6 +100,7 @@ def main():
     load.export_commercial_fit(conn2)
     load.export_forecast_confidence(conn2)
     load.export_owner_goals(conn2)
+    load.export_account_coverage(conn2)
     load.export_reporting_tag_detail(conn2)
     load.export_elevated_buyer_detail(conn2)
     load.export_metadata(conn2)

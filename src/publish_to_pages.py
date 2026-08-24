@@ -23,6 +23,7 @@ FILES = [
     "09_owner_goals.csv",
     "10_reporting_tag_detail.csv",
     "11_elevated_buyer_detail.csv",
+    "12_account_coverage.csv",
 ]
 
 

@@ -147,6 +147,13 @@ class PipedriveClient:
         """Fetch all person field definitions (for Label / Reporting Tag option lookups)."""
         return self.get_v1_paginated(f"{API_BASE}/v1/personFields")
 
+    def fetch_organizations(self) -> list:
+        """Bulk paginated pull of ALL organizations — for org_id -> name lookups."""
+        log.info("Fetching organizations...")
+        orgs = self.get_v1_paginated(f"{API_BASE}/v1/organizations")
+        log.info(f"  → {len(orgs)} organizations")
+        return orgs
+
     def fetch_persons(self) -> list:
         """
         Bulk paginated pull of ALL persons — one call sequence total, not one
@@ -236,6 +243,13 @@ def init_db(conn: sqlite3.Connection):
         user_id       INTEGER PRIMARY KEY,
         name          TEXT,
         email         TEXT,
+        updated_at    TEXT
+    );
+
+    -- Organizations — overwritten each run (name lookup only, no history needed)
+    CREATE TABLE IF NOT EXISTS dim_organizations (
+        org_id        INTEGER PRIMARY KEY,
+        name          TEXT,
         updated_at    TEXT
     );
 
@@ -429,6 +443,17 @@ def upsert_users(conn, users: list):
         [(u["id"], u["name"], u.get("email"), now) for u in users]
     )
     conn.commit()
+
+
+def upsert_organizations(conn, orgs: list):
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute("DELETE FROM dim_organizations")
+    conn.executemany(
+        "INSERT OR REPLACE INTO dim_organizations (org_id, name, updated_at) VALUES (?,?,?)",
+        [(o["id"], o.get("name"), now) for o in orgs]
+    )
+    conn.commit()
+    log.info(f"  Organizations: {len(orgs)} stored")
 
 
 def upsert_persons(conn, persons: list):
@@ -644,6 +669,7 @@ def run_full(client: PipedriveClient, conn: sqlite3.Connection) -> dict:
     upsert_field_options(conn, client.fetch_deal_fields())
     upsert_field_options(conn, client.fetch_person_fields())
     upsert_persons(conn, client.fetch_persons())
+    upsert_organizations(conn, client.fetch_organizations())
 
     # Deals
     all_deals = []
@@ -688,6 +714,7 @@ def run_incremental(client: PipedriveClient, conn: sqlite3.Connection) -> dict:
     # Persons are cheap to bulk-refresh (a handful of paginated calls
     # regardless of headcount) — always refresh latest state, every run.
     upsert_persons(conn, client.fetch_persons())
+    upsert_organizations(conn, client.fetch_organizations())
 
     all_deals = []
     for status in ("open", "won", "lost"):
