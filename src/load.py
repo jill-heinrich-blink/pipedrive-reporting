@@ -491,6 +491,19 @@ def export_owner_goals(conn):
               AND p.label = ? AND s.name = 'Engaged'
         """, (owner_id, label_filter)).fetchone()[0]
 
+        won_accounts = conn.execute("""
+            SELECT COUNT(DISTINCT org_id) FROM deals_transformed
+            WHERE owner_id = ? AND status = 'won' AND org_id IS NOT NULL
+              AND date(won_time) BETWEEN date(?) AND date(?)
+        """, (owner_id, q_start, q_end)).fetchone()[0]
+
+        open_pipeline_accounts = conn.execute(f"""
+            SELECT COUNT(DISTINCT org_id) FROM deals_transformed
+            WHERE owner_id = ? AND status = 'open' AND org_id IS NOT NULL
+              AND stage_id NOT IN ({stage_zero_clause})
+              AND pipeline_id IN (2, 7, 8)
+        """, (owner_id,)).fetchone()[0]
+
         elevated_mtg = conn.execute("""
             SELECT COUNT(*) FROM deals_transformed t
             JOIN dim_persons p ON t.person_id = p.person_id
@@ -520,6 +533,8 @@ def export_owner_goals(conn):
             "open_deals_no_close_date_count": no_close_date,
             "open_deals_no_person_count": no_person,
             "open_deals_stage_zero_count": stage_zero_count,
+            "won_accounts_count": won_accounts,
+            "open_pipeline_accounts_count": open_pipeline_accounts,
             "reporting_tag_deal_count": tag_deals[0],
             "reporting_tag_deal_value": tag_deals[1],
             "elevated_buyer_engaged_count": elevated_engaged,

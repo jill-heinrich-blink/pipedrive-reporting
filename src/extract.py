@@ -271,6 +271,7 @@ def init_db(conn: sqlite3.Connection):
         stage_id            INTEGER,
         owner_id            INTEGER,
         person_id           INTEGER,
+        org_id              INTEGER,
         creator_id          INTEGER,
         value               REAL,
         weighted_value      REAL,
@@ -363,6 +364,13 @@ def init_db(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE deals_snapshot ADD COLUMN person_id INTEGER")
         conn.commit()
         log.info("  Migration: added person_id column to deals_snapshot")
+    except sqlite3.OperationalError:
+        pass  # already exists
+
+    try:
+        conn.execute("ALTER TABLE deals_snapshot ADD COLUMN org_id INTEGER")
+        conn.commit()
+        log.info("  Migration: added org_id column to deals_snapshot")
     except sqlite3.OperationalError:
         pass  # already exists
 
@@ -477,7 +485,7 @@ def insert_deal_snapshot(conn, deal: dict, extracted_at: str):
     conn.execute("""
         INSERT INTO deals_snapshot (
             extracted_at, deal_id, title, status, pipeline_id, stage_id,
-            owner_id, person_id, creator_id, value, weighted_value, currency, probability,
+            owner_id, person_id, org_id, creator_id, value, weighted_value, currency, probability,
             expected_close_date, add_time, update_time, stage_change_time,
             won_time, lost_time, close_time, lost_reason,
             last_activity_date, last_incoming_mail_time, last_outgoing_mail_time,
@@ -491,7 +499,7 @@ def insert_deal_snapshot(conn, deal: dict, extracted_at: str):
             lead_source, resourcing_label, is_archived
         ) VALUES (
             ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
-            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
         )
     """, (
         extracted_at,
@@ -502,6 +510,7 @@ def insert_deal_snapshot(conn, deal: dict, extracted_at: str):
         deal.get("stage_id"),
         deal.get("owner_id") or ((deal.get("user_id") or {}).get("id") if isinstance(deal.get("user_id"), dict) else deal.get("user_id")),
         (deal.get("person_id") or {}).get("value") if isinstance(deal.get("person_id"), dict) else deal.get("person_id"),
+        (deal.get("org_id") or {}).get("value") if isinstance(deal.get("org_id"), dict) else deal.get("org_id"),
         (deal.get("creator_user_id") or {}).get("id") if isinstance(deal.get("creator_user_id"), dict) else deal.get("creator_user_id"),
         deal.get("value"),
         # v2 doesn't return weighted_value — calculate from value × probability
