@@ -13,17 +13,22 @@ Run after transform.py:
 """
 
 import csv
+import json
 import logging
 import sqlite3
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 BASE_DIR    = Path(__file__).resolve().parent.parent
+CONFIG_DIR  = BASE_DIR / "config"
 DATA_DIR    = BASE_DIR / "data"
 EXPORT_DIR  = DATA_DIR / "exports"
 DB_PATH     = DATA_DIR / "pipedrive.db"
 
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+with open(CONFIG_DIR / "targets.json") as f:
+    TARGETS = json.load(f)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -398,6 +403,191 @@ def export_forecast_confidence(conn):
     """, "08_forecast_confidence.csv")
 
 
+def export_owner_goals(conn):
+    """
+    Report 9: Owner Goals & Progress-to-Target — the 4 beta metrics
+    (Sales, Pipeline Coverage, Reporting Tag deals, Elevated Buyer deals)
+    per owner, driven by config/targets.json since Pipedrive has no native
+    concept of an external target.
+    """
+    q_start = TARGETS["quarter_start"]
+    q_end   = TARGETS["quarter_end"]
+    mult    = TARGETS["pipeline_coverage_multiplier"]
+    stage_zero_ids = TARGETS["stage_zero_exclusion"]["stage_ids"]
+    tag_filter     = TARGETS["reporting_tag_filter"]
+    label_filter   = TARGETS["elevated_buyer_label"]
+    today = date.today().isoformat()
+    stage_zero_clause = ",".join(str(s) for s in stage_zero_ids)
+
+    rows = []
+    for owner_id_str, cfg in TARGETS["owners"].items():
+        if owner_id_str.startswith("_"):
+            continue
+        owner_id = int(owner_id_str)
+        goal = cfg["sales_goal"]
+
+        sales_actual = conn.execute(f"""
+            SELECT COALESCE(SUM(value), 0) FROM deals_transformed
+            WHERE owner_id = ? AND status = 'won'
+              AND date(won_time) BETWEEN date(?) AND date(?)
+        """, (owner_id, q_start, q_end)).fetchone()[0]
+
+        open_all = conn.execute(f"""
+            SELECT COALESCE(SUM(value), 0) FROM deals_transformed
+            WHERE owner_id = ? AND status = 'open'
+              AND stage_id NOT IN ({stage_zero_clause})
+              AND pipeline_id IN (2, 7, 8)
+        """, (owner_id,)).fetchone()[0]
+
+        open_window = conn.execute(f"""
+            SELECT COALESCE(SUM(value), 0) FROM deals_transformed
+            WHERE owner_id = ? AND status = 'open'
+              AND stage_id NOT IN ({stage_zero_clause})
+              AND pipeline_id IN (2, 7, 8)
+              AND expected_close_date IS NOT NULL AND expected_close_date != ''
+              AND date(expected_close_date) BETWEEN date(?) AND date(?)
+        """, (owner_id, today, q_end)).fetchone()[0]
+
+        overdue = conn.execute(f"""
+            SELECT COUNT(*), COALESCE(SUM(value), 0) FROM deals_transformed
+            WHERE owner_id = ? AND status = 'open'
+              AND stage_id NOT IN ({stage_zero_clause})
+              AND expected_close_date IS NOT NULL AND expected_close_date != ''
+              AND date(expected_close_date) < date(?)
+        """, (owner_id, today)).fetchone()
+
+        no_close_date = conn.execute(f"""
+            SELECT COUNT(*) FROM deals_transformed
+            WHERE owner_id = ? AND status = 'open'
+              AND stage_id NOT IN ({stage_zero_clause})
+              AND (expected_close_date IS NULL OR expected_close_date = '')
+        """, (owner_id,)).fetchone()[0]
+
+        no_person = conn.execute(f"""
+            SELECT COUNT(*) FROM deals_transformed
+            WHERE owner_id = ? AND status = 'open'
+              AND stage_id NOT IN ({stage_zero_clause})
+              AND (person_id IS NULL OR person_id = '')
+        """, (owner_id,)).fetchone()[0]
+
+        stage_zero_count = conn.execute(f"""
+            SELECT COUNT(*) FROM deals_transformed
+            WHERE owner_id = ? AND status = 'open' AND stage_id IN ({stage_zero_clause})
+        """, (owner_id,)).fetchone()[0]
+
+        tag_deals = conn.execute(f"""
+            SELECT COUNT(*), COALESCE(SUM(t.value), 0) FROM deals_transformed t
+            JOIN dim_persons p ON t.person_id = p.person_id
+            WHERE t.owner_id = ? AND t.status = 'open'
+              AND t.stage_id NOT IN ({stage_zero_clause})
+              AND p.reporting_tag = ?
+        """, (owner_id, tag_filter)).fetchone()
+
+        elevated_engaged = conn.execute("""
+            SELECT COUNT(*) FROM deals_transformed t
+            JOIN dim_persons p ON t.person_id = p.person_id
+            JOIN dim_stages s ON t.stage_id = s.stage_id
+            WHERE t.owner_id = ? AND t.pipeline_id = 10
+              AND p.label = ? AND s.name = 'Engaged'
+        """, (owner_id, label_filter)).fetchone()[0]
+
+        elevated_mtg = conn.execute("""
+            SELECT COUNT(*) FROM deals_transformed t
+            JOIN dim_persons p ON t.person_id = p.person_id
+            JOIN dim_stages s ON t.stage_id = s.stage_id
+            WHERE t.owner_id = ? AND t.pipeline_id = 10
+              AND p.label = ? AND s.name = 'Meeting Scheduled'
+              AND t.outbound_meeting_date IS NOT NULL AND t.outbound_meeting_date != ''
+              AND date(t.outbound_meeting_date) BETWEEN date(?) AND date(?)
+        """, (owner_id, label_filter, today, q_end)).fetchone()[0]
+
+        coverage_goal = goal * mult
+        rows.append({
+            "owner_id": owner_id,
+            "owner_name": cfg.get("name"),
+            "sales_goal": goal,
+            "sales_goal_source": cfg.get("source"),
+            "sales_actual": sales_actual,
+            "attainment_pct": round(sales_actual / goal, 4) if goal else None,
+            "pipeline_coverage_multiplier": mult,
+            "coverage_goal": coverage_goal,
+            "open_pipeline_all": open_all,
+            "open_pipeline_in_window": open_window,
+            "coverage_pct_all": round(open_all / coverage_goal, 4) if coverage_goal else None,
+            "coverage_pct_in_window": round(open_window / coverage_goal, 4) if coverage_goal else None,
+            "open_deals_overdue_count": overdue[0],
+            "open_deals_overdue_value": overdue[1],
+            "open_deals_no_close_date_count": no_close_date,
+            "open_deals_no_person_count": no_person,
+            "open_deals_stage_zero_count": stage_zero_count,
+            "reporting_tag_deal_count": tag_deals[0],
+            "reporting_tag_deal_value": tag_deals[1],
+            "elevated_buyer_engaged_count": elevated_engaged,
+            "elevated_buyer_meeting_scheduled_count": elevated_mtg,
+            "elevated_buyer_total_count": elevated_engaged + elevated_mtg,
+            "quarter_start": q_start,
+            "quarter_end": q_end,
+            "as_of_date": today,
+        })
+
+    if not rows:
+        log.warning("  09_owner_goals.csv: no owners configured in targets.json")
+        return 0
+
+    path = EXPORT_DIR / "09_owner_goals.csv"
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+    log.info(f"  09_owner_goals.csv: {len(rows)} rows → {path}")
+    return len(rows)
+
+
+def export_reporting_tag_detail(conn):
+    """Report 10 (detail): the actual open deals behind the Reporting Tag count."""
+    tag_filter = TARGETS["reporting_tag_filter"]
+    stage_zero_ids = TARGETS["stage_zero_exclusion"]["stage_ids"]
+    stage_zero_clause = ",".join(str(s) for s in stage_zero_ids)
+    write_csv(conn, f"""
+        SELECT t.deal_id, t.title, u.name AS owner_name, pl.name AS pipeline_name,
+               s.name AS stage_name, t.value, t.expected_close_date,
+               p.person_id, p.name AS person_name, p.reporting_tag
+        FROM deals_transformed t
+        JOIN dim_persons p ON t.person_id = p.person_id
+        LEFT JOIN dim_users u ON t.owner_id = u.user_id
+        LEFT JOIN dim_pipelines pl ON t.pipeline_id = pl.pipeline_id
+        LEFT JOIN dim_stages s ON t.stage_id = s.stage_id
+        WHERE t.status = 'open'
+          AND t.stage_id NOT IN ({stage_zero_clause})
+          AND p.reporting_tag = ?
+        ORDER BY u.name, t.value DESC
+    """, "10_reporting_tag_detail.csv", (tag_filter,))
+
+
+def export_elevated_buyer_detail(conn):
+    """Report 11 (detail): the actual Pre-Sales deals behind the Elevated Buyer count."""
+    label_filter = TARGETS["elevated_buyer_label"]
+    q_end = TARGETS["quarter_end"]
+    today = date.today().isoformat()
+    write_csv(conn, """
+        SELECT t.deal_id, t.title, u.name AS owner_name, s.name AS stage_name,
+               t.outbound_meeting_date, p.person_id, p.name AS person_name, p.label,
+               CASE
+                   WHEN s.name = 'Engaged' THEN 1
+                   WHEN s.name = 'Meeting Scheduled'
+                    AND t.outbound_meeting_date IS NOT NULL AND t.outbound_meeting_date != ''
+                    AND date(t.outbound_meeting_date) BETWEEN date(?) AND date(?)
+                   THEN 1 ELSE 0
+               END AS qualifies
+        FROM deals_transformed t
+        JOIN dim_persons p ON t.person_id = p.person_id
+        LEFT JOIN dim_users u ON t.owner_id = u.user_id
+        LEFT JOIN dim_stages s ON t.stage_id = s.stage_id
+        WHERE t.pipeline_id = 10 AND p.label = ?
+        ORDER BY qualifies DESC, u.name
+    """, "11_elevated_buyer_detail.csv", (today, q_end, label_filter))
+
+
 def export_metadata(conn):
     """Dimension tables for joins in Looker Studio."""
     write_csv(conn, "SELECT * FROM dim_pipelines", "dim_pipelines.csv")
@@ -432,6 +622,9 @@ def main():
     export_velocity(conn)
     export_commercial_fit(conn)
     export_forecast_confidence(conn)
+    export_owner_goals(conn)
+    export_reporting_tag_detail(conn)
+    export_elevated_buyer_detail(conn)
     export_metadata(conn)
     write_manifest()
 

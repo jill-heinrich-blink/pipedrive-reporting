@@ -1,0 +1,29 @@
+{
+  "_comment": "Manual owner-level Q3 targets — Pipedrive has no native concept of these, so they're maintained by hand here rather than pulled from the API. Update owners.<name>.sales_goal as real account-plan targets land; today only Albert's is a real leadership-provided number.",
+
+  "quarter_start": "2026-07-01",
+  "quarter_end": "2026-09-30",
+  "pipeline_coverage_multiplier": 2.7,
+
+  "stage_zero_exclusion": {
+    "_comment": "Stage '0 - Lead (New Unqualified)' is excluded from all open-pipeline/open-deal calcs below — these leads are mid-migration into the Pre-Sales pipeline (adoption not 100% per Jill, 2026-08-24) and usually carry no close date yet.",
+    "stage_ids": [8, 38, 44]
+  },
+
+  "reporting_tag_filter": "2Q27 AP Buyer",
+  "elevated_buyer_label": "Elevated Buyer",
+
+  "owners": {
+    "_comment": "Keyed by Pipedrive user_id, not name — Albert's Pipedrive user profile name field is his email address (albert.thibault@blinkux.com), not a display name, so name-matching would silently break for him.",
+    "24121734": {
+      "name": "Albert Thibault",
+      "sales_goal": 1000000,
+      "source": "Stated by Jill Heinrich as Albert's Q3 sales target."
+    },
+    "11292917": {
+      "name": "Kevin Burzynski",
+      "sales_goal": 1000000,
+      "source": "TEST ASSUMPTION — set to match Albert's goal for beta comparison only, per Jill's instruction on 2026-08-24. Not Kevin's confirmed real target. Replace when known."
+    }
+  }
+}

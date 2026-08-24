@@ -44,6 +44,12 @@
     }
   },
 
+  "person_fields": {
+    "_comment": "Person-level fields — Label is a standard Pipedrive field (key literal 'label'); Reporting Tag is a custom field, hash key below.",
+    "label":         "label",
+    "reporting_tag": "a2259176d22b5d236eb8293f4f6e9ae7a8acf4be"
+  },
+
   "custom_fields": {
     "rph_sold":                     "96bbafc8a89f547e915d813c8970fb3e5fcc562c",
     "price_to_client":              "7e484e64e38024eee4d27262c401f55632687df5",

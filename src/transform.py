@@ -403,6 +403,38 @@ def build_stage_history(conn: sqlite3.Connection):
     log.info(f"  Stage history: {len(history_rows)} stage entries for {len(set(r[0] for r in history_rows))} deals")
 
 
+# ── Person label / reporting tag resolution ──────────────────────────────────
+
+def resolve_person_labels(conn: sqlite3.Connection):
+    """
+    dim_persons.label / .reporting_tag are stored as raw option IDs (or
+    comma-separated IDs for 'set' fields). Resolve to human-readable text
+    using dim_field_options, same pattern as the deal dropdown fields.
+    """
+    log.info("Resolving person Label / Reporting Tag option IDs...")
+    person_fields = FIELDS["person_fields"]
+    option_lookup = build_option_lookup(conn)
+
+    rows = conn.execute("SELECT person_id, label, reporting_tag FROM dim_persons").fetchall()
+    updates = []
+    for r in rows:
+        label_resolved = resolve_option(r["label"], person_fields["label"], option_lookup)
+        tag_raw = r["reporting_tag"]
+        if tag_raw and "," in str(tag_raw):
+            parts = [resolve_option(p, person_fields["reporting_tag"], option_lookup) for p in str(tag_raw).split(",")]
+            tag_resolved = ", ".join(p for p in parts if p)
+        else:
+            tag_resolved = resolve_option(tag_raw, person_fields["reporting_tag"], option_lookup)
+        updates.append((label_resolved, tag_resolved, r["person_id"]))
+
+    conn.executemany(
+        "UPDATE dim_persons SET label = ?, reporting_tag = ? WHERE person_id = ?",
+        updates
+    )
+    conn.commit()
+    log.info(f"  Resolved labels/tags for {len(updates)} persons")
+
+
 # ── Main transform ────────────────────────────────────────────────────────────
 
 def build_transformed_deals(conn: sqlite3.Connection):
@@ -561,6 +593,7 @@ def main():
     conn = get_conn()
     build_stage_history(conn)
     build_transformed_deals(conn)
+    resolve_person_labels(conn)
     log.info("=== Transform complete ===")
 
 

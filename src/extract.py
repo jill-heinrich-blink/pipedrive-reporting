@@ -41,6 +41,7 @@ with open(CONFIG_DIR / "fields.json") as f:
     FIELDS = json.load(f)
 
 CUSTOM = FIELDS["custom_fields"]
+PERSON_FIELDS = FIELDS["person_fields"]
 
 # All custom field keys we want to include on every deal fetch
 CUSTOM_KEYS = list(CUSTOM.values())
@@ -142,6 +143,21 @@ class PipedriveClient:
         """Fetch all deal field definitions (for option label lookups)."""
         return self.get_v1_paginated(f"{API_BASE}/v1/dealFields")
 
+    def fetch_person_fields(self) -> list:
+        """Fetch all person field definitions (for Label / Reporting Tag option lookups)."""
+        return self.get_v1_paginated(f"{API_BASE}/v1/personFields")
+
+    def fetch_persons(self) -> list:
+        """
+        Bulk paginated pull of ALL persons — one call sequence total, not one
+        call per person. Label and custom fields (incl. Reporting Tag) come
+        back on the standard v1 list response with no extra params needed.
+        """
+        log.info("Fetching persons...")
+        persons = self.get_v1_paginated(f"{API_BASE}/v1/persons")
+        log.info(f"  → {len(persons)} persons")
+        return persons
+
     # ── Deals ─────────────────────────────────────────────────────────────────
 
     def fetch_deals(self, status: str = "open", updated_after: str = None) -> list:
@@ -223,6 +239,17 @@ def init_db(conn: sqlite3.Connection):
         updated_at    TEXT
     );
 
+    -- Persons — overwritten each run (latest Label / Reporting Tag state only,
+    -- not historized like deals_snapshot). If tag-adoption trend is ever
+    -- needed, this would need the same append-only treatment as deals.
+    CREATE TABLE IF NOT EXISTS dim_persons (
+        person_id       INTEGER PRIMARY KEY,
+        name            TEXT,
+        label           TEXT,
+        reporting_tag   TEXT,
+        updated_at      TEXT
+    );
+
     -- Option label lookup for dropdown custom fields (option_id → label)
     CREATE TABLE IF NOT EXISTS dim_field_options (
         field_key     TEXT NOT NULL,
@@ -243,6 +270,7 @@ def init_db(conn: sqlite3.Connection):
         pipeline_id         INTEGER,
         stage_id            INTEGER,
         owner_id            INTEGER,
+        person_id           INTEGER,
         creator_id          INTEGER,
         value               REAL,
         weighted_value      REAL,
@@ -326,6 +354,18 @@ def init_db(conn: sqlite3.Connection):
     );
     """)
     conn.commit()
+
+    # Migration: person_id was added after this DB was first created (2026-08-11).
+    # CREATE TABLE IF NOT EXISTS above doesn't touch existing tables, so add it
+    # explicitly. Existing historical rows get NULL person_id — expected, since
+    # that data was never captured before this column existed.
+    try:
+        conn.execute("ALTER TABLE deals_snapshot ADD COLUMN person_id INTEGER")
+        conn.commit()
+        log.info("  Migration: added person_id column to deals_snapshot")
+    except sqlite3.OperationalError:
+        pass  # already exists
+
     log.info("Database schema initialised")
 
 
@@ -383,6 +423,33 @@ def upsert_users(conn, users: list):
     conn.commit()
 
 
+def upsert_persons(conn, persons: list):
+    """
+    Overwrites dim_persons each run — latest Label / Reporting Tag state only.
+    Raw option IDs are stored here (matching the deal custom-field pattern);
+    transform.py resolves them to human-readable labels via dim_field_options.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    label_key = PERSON_FIELDS["label"]
+    tag_key   = PERSON_FIELDS["reporting_tag"]
+    rows = []
+    for p in persons:
+        label_raw = p.get(label_key)
+        tag_raw   = p.get(tag_key)
+        # 'set' type custom fields (like Reporting Tag) can come back as a
+        # comma-separated string of option IDs if multiple are selected.
+        if isinstance(tag_raw, list):
+            tag_raw = ",".join(str(v) for v in tag_raw) if tag_raw else None
+        rows.append((p["id"], p.get("name"), label_raw, tag_raw, now))
+    conn.execute("DELETE FROM dim_persons")
+    conn.executemany(
+        "INSERT OR REPLACE INTO dim_persons (person_id, name, label, reporting_tag, updated_at) VALUES (?,?,?,?,?)",
+        rows
+    )
+    conn.commit()
+    log.info(f"  Persons: {len(rows)} stored (label/reporting_tag latest state)")
+
+
 def _cf(deal: dict, key: str):
     """Safely retrieve a custom field value from a deal dict.
     Pipedrive API v2 nests custom fields under deal['custom_fields'].
@@ -410,7 +477,7 @@ def insert_deal_snapshot(conn, deal: dict, extracted_at: str):
     conn.execute("""
         INSERT INTO deals_snapshot (
             extracted_at, deal_id, title, status, pipeline_id, stage_id,
-            owner_id, creator_id, value, weighted_value, currency, probability,
+            owner_id, person_id, creator_id, value, weighted_value, currency, probability,
             expected_close_date, add_time, update_time, stage_change_time,
             won_time, lost_time, close_time, lost_reason,
             last_activity_date, last_incoming_mail_time, last_outgoing_mail_time,
@@ -423,7 +490,7 @@ def insert_deal_snapshot(conn, deal: dict, extracted_at: str):
             right_fit_for_blink, mphasis_engineering, mphasis_engineering_value,
             lead_source, resourcing_label, is_archived
         ) VALUES (
-            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
             ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
         )
     """, (
@@ -434,6 +501,7 @@ def insert_deal_snapshot(conn, deal: dict, extracted_at: str):
         deal.get("pipeline_id") or (deal.get("pipeline") if isinstance(deal.get("pipeline"), int) else None),
         deal.get("stage_id"),
         deal.get("owner_id") or ((deal.get("user_id") or {}).get("id") if isinstance(deal.get("user_id"), dict) else deal.get("user_id")),
+        (deal.get("person_id") or {}).get("value") if isinstance(deal.get("person_id"), dict) else deal.get("person_id"),
         (deal.get("creator_user_id") or {}).get("id") if isinstance(deal.get("creator_user_id"), dict) else deal.get("creator_user_id"),
         deal.get("value"),
         # v2 doesn't return weighted_value — calculate from value × probability
@@ -565,6 +633,8 @@ def run_full(client: PipedriveClient, conn: sqlite3.Connection) -> dict:
     upsert_stages(conn, client.fetch_stages())
     upsert_users(conn, client.fetch_users())
     upsert_field_options(conn, client.fetch_deal_fields())
+    upsert_field_options(conn, client.fetch_person_fields())
+    upsert_persons(conn, client.fetch_persons())
 
     # Deals
     all_deals = []
@@ -605,6 +675,10 @@ def run_incremental(client: PipedriveClient, conn: sqlite3.Connection) -> dict:
 
     extracted_at = datetime.now(timezone.utc).isoformat()
     stats = {"deals": 0, "changelogs": 0}
+
+    # Persons are cheap to bulk-refresh (a handful of paginated calls
+    # regardless of headcount) — always refresh latest state, every run.
+    upsert_persons(conn, client.fetch_persons())
 
     all_deals = []
     for status in ("open", "won", "lost"):

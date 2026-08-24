@@ -87,6 +87,7 @@ def main():
     # 2. Transform
     transform.build_stage_history(conn)
     transform.build_transformed_deals(conn)
+    transform.resolve_person_labels(conn)
 
     # 3. Load
     conn2 = load.get_conn()
@@ -98,6 +99,9 @@ def main():
     load.export_velocity(conn2)
     load.export_commercial_fit(conn2)
     load.export_forecast_confidence(conn2)
+    load.export_owner_goals(conn2)
+    load.export_reporting_tag_detail(conn2)
+    load.export_elevated_buyer_detail(conn2)
     load.export_metadata(conn2)
     load.write_manifest()
 
