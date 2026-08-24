@@ -578,8 +578,8 @@ def export_account_coverage(conn):
         WHERE t.owner_id IN ({placeholders})
           AND t.org_id IS NOT NULL
         GROUP BY t.owner_id, t.org_id
-        HAVING won_value > 0 OR open_pipeline_value_all > 0
-        ORDER BY t.owner_id, (won_value + open_pipeline_value_all) DESC
+        HAVING won_value > 0 OR open_pipeline_value_in_window > 0
+        ORDER BY t.owner_id, (won_value + open_pipeline_value_in_window) DESC
     """, (q_start, q_end, today, q_end, *owner_ids)).fetchall()
 
     out_rows = []
