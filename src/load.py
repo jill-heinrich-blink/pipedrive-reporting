@@ -552,6 +552,7 @@ def export_account_coverage(conn):
     """
     q_start = TARGETS["quarter_start"]
     q_end   = TARGETS["quarter_end"]
+    today = date.today().isoformat()
     stage_zero_ids = TARGETS["stage_zero_exclusion"]["stage_ids"]
     stage_zero_clause = ",".join(str(s) for s in stage_zero_ids)
     owner_ids = [int(k) for k in TARGETS["owners"] if not k.startswith("_")]
@@ -566,15 +567,20 @@ def export_account_coverage(conn):
                      THEN t.value ELSE 0 END) AS won_value,
             SUM(CASE WHEN t.status='open' AND t.stage_id NOT IN ({stage_zero_clause})
                        AND t.pipeline_id IN (2,7,8)
-                     THEN t.value ELSE 0 END) AS open_pipeline_value
+                     THEN t.value ELSE 0 END) AS open_pipeline_value_all,
+            SUM(CASE WHEN t.status='open' AND t.stage_id NOT IN ({stage_zero_clause})
+                       AND t.pipeline_id IN (2,7,8)
+                       AND t.expected_close_date IS NOT NULL AND t.expected_close_date != ''
+                       AND date(t.expected_close_date) BETWEEN date(?) AND date(?)
+                     THEN t.value ELSE 0 END) AS open_pipeline_value_in_window
         FROM deals_transformed t
         LEFT JOIN dim_organizations o ON t.org_id = o.org_id
         WHERE t.owner_id IN ({placeholders})
           AND t.org_id IS NOT NULL
         GROUP BY t.owner_id, t.org_id
-        HAVING won_value > 0 OR open_pipeline_value > 0
-        ORDER BY t.owner_id, (won_value + open_pipeline_value) DESC
-    """, (q_start, q_end, *owner_ids)).fetchall()
+        HAVING won_value > 0 OR open_pipeline_value_all > 0
+        ORDER BY t.owner_id, (won_value + open_pipeline_value_all) DESC
+    """, (q_start, q_end, today, q_end, *owner_ids)).fetchall()
 
     out_rows = []
     for r in rows:
@@ -584,7 +590,8 @@ def export_account_coverage(conn):
             "org_name": r["org_name"],
             "org_id": r["org_id"],
             "won_value": r["won_value"],
-            "open_pipeline_value": r["open_pipeline_value"],
+            "open_pipeline_value_in_window": r["open_pipeline_value_in_window"],
+            "open_pipeline_value_all": r["open_pipeline_value_all"],
         })
 
     if not out_rows:
