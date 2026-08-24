@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BD Pipeline &amp; Engagement — Q3 Beta</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root {
+    --blue: #2563eb;
+    --blue-light: #93c5fd;
+    --amber: #fbbf24;
+    --amber-dark: #b45309;
+    --border: #e2e2e2;
+    --border-light: #f0f0f0;
+    --bg-soft: #f7f7f8;
+    --text: #1a1a1a;
+    --text-secondary: #666;
+    --warn-bg: #fef3c7;
+    --warn-text: #92400e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+    background: #fff;
+  }
+  .sr-only { position: absolute; left: -9999px; }
+  h1 { font-size: 20px; margin: 0; }
+  .subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .header-row { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .badge { font-size: 11px; padding: 4px 10px; border-radius: 12px; background: var(--bg-soft); color: var(--text-secondary); white-space: nowrap; }
+  .badge.warn { background: var(--warn-bg); color: var(--warn-text); }
+  .owner-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card-title-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .card-title { font-weight: 700; font-size: 15px; }
+  .metric-label { font-size: 12px; color: var(--text-secondary); margin-top: 10px; }
+  .bar-track { background: var(--bg-soft); border-radius: 5px; height: 8px; margin-top: 4px; overflow: hidden; }
+  .bar-fill { background: var(--blue); height: 100%; }
+  .big-pct { font-size: 20px; font-weight: 700; margin-top: 4px; }
+  .subgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; font-size: 12px; }
+  .subcard { background: var(--bg-soft); border-radius: 6px; padding: 8px; }
+  .subcard .lbl { color: var(--text-secondary); }
+  .subcard .val { font-weight: 700; font-size: 15px; }
+  .subcard .sub { color: #888; font-size: 11px; }
+  .kv { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; border-bottom: 1px solid var(--border-light); }
+  .kv:last-child { border-bottom: none; }
+  .flag { color: var(--amber-dark); font-weight: 700; }
+  .section { margin-top: 16px; border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .section-title { font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  table { width: 100%; font-size: 11px; border-collapse: collapse; }
+  th { text-align: left; color: var(--text-secondary); border-bottom: 1px solid var(--border-light); padding: 4px 2px; }
+  td { padding: 4px 2px; border-bottom: 1px solid var(--border-light); }
+  .note { font-size: 10px; color: var(--amber-dark); margin-top: 8px; }
+  .footer { margin-top: 14px; font-size: 10px; color: #888; text-align: center; }
+  .loading, .error { padding: 40px; text-align: center; color: var(--text-secondary); }
+  .error { color: #b91c1c; }
+</style>
+</head>
+<body>
+  <h1 class="sr-only" id="sr-summary">BD pipeline beta dashboard showing sales attainment, pipeline coverage, reporting tag deals, and elevated buyer engagement per owner.</h1>
+
+  <div class="header-row">
+    <div>
+      <h1>BD Pipeline &amp; Engagement — Q3 Beta</h1>
+      <div class="subtitle" id="subtitle">Loading…</div>
+    </div>
+    <div class="badge">Static snapshot — refreshed by re-publishing exports, not live</div>
+  </div>
+
+  <div id="content"><div class="loading">Loading data…</div></div>
+
+  <div class="footer">
+    Built from data/exports/09_owner_goals.csv, 10_reporting_tag_detail.csv, 11_elevated_buyer_detail.csv —
+    local Pipedrive ETL pipeline (see repo README). Not connected to Looker Studio or Google Sheets.
+  </div>
+
+<script>
+// Minimal RFC4180-ish CSV parser — handles quoted fields with embedded commas,
+// which several of our text columns (e.g. sales_goal_source) actually contain.
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], next = text[i + 1];
+    if (inQuotes) {
+      if (c === '"' && next === '"') { field += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { field += c; }
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && next === '\n') continue;
+        row.push(field); field = '';
+        if (row.length > 1 || row[0] !== '') rows.push(row);
+        row = [];
+      } else field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  const headers = rows.shift();
+  return rows.map(r => Object.fromEntries(headers.map((h, i) => [h, r[i]])));
+}
+
+function pct(x) { return (parseFloat(x) * 100).toFixed(1); }
+function money(x) {
+  const n = parseFloat(x);
+  return '$' + (n >= 1000 ? (n / 1000000 >= 1 ? (n/1000000).toFixed(2) + 'M' : Math.round(n/1000) + 'K') : Math.round(n));
+}
+
+async function loadCSV(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error('Could not load ' + path + ' (' + res.status + ')');
+  return parseCSV(await res.text());
+}
+
+function ownerCard(o) {
+  const isTest = /TEST ASSUMPTION/i.test(o.sales_goal_source || '');
+  const inWindowPct = parseFloat(o.coverage_pct_in_window) * 100;
+  const flags = [];
+  if (parseInt(o.open_deals_overdue_count) > 0) flags.push(['Open deals overdue', o.open_deals_overdue_count + ' (' + money(o.open_deals_overdue_value) + ')', true]);
+  if (parseInt(o.open_deals_no_close_date_count) > 0) flags.push(['Open deals, no expected close date', o.open_deals_no_close_date_count, parseInt(o.open_deals_no_close_date_count) > 10]);
+  if (parseInt(o.open_deals_no_person_count) > 0) flags.push(['Open deals, no linked person', o.open_deals_no_person_count, parseInt(o.open_deals_no_person_count) > 0]);
+
+  return `
+    <div class="card">
+      <div class="card-title-row">
+        <div class="card-title">${o.owner_name}</div>
+        <div class="badge${isTest ? ' warn' : ''}">${isTest ? 'test-assumption goal' : 'real goal'}</div>
+      </div>
+      <div class="metric-label">Sales — ${money(o.sales_actual)} of ${money(o.sales_goal)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct(o.attainment_pct)}%"></div></div>
+      <div class="big-pct">${pct(o.attainment_pct)}%</div>
+
+      <div class="subgrid">
+        <div class="subcard">
+          <div class="lbl">Coverage — all open</div>
+          <div class="val">${pct(o.coverage_pct_all)}%</div>
+          <div class="sub">${money(o.open_pipeline_all)} / ${money(o.coverage_goal)} goal</div>
+        </div>
+        <div class="subcard">
+          <div class="lbl">Coverage — in window</div>
+          <div class="val" style="${inWindowPct < 50 ? 'color:var(--amber-dark)' : ''}">${pct(o.coverage_pct_in_window)}%</div>
+          <div class="sub">${money(o.open_pipeline_in_window)} / ${money(o.coverage_goal)} goal</div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div class="kv"><span>Reporting Tag deals (2Q27 AP Buyer)</span><b>${o.reporting_tag_deal_count}</b></div>
+        <div class="kv"><span>Elevated Buyer pre-sales deals</span><b>${o.elevated_buyer_total_count}</b></div>
+        ${flags.map(([label, val, warn]) => `<div class="kv"><span>${label}</span><b class="${warn ? 'flag' : ''}">${val}</b></div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function detailTable(title, rows, cols, note) {
+  if (!rows.length) return `<div class="card"><div class="section-title">${title}</div><div style="font-size:12px;color:var(--text-secondary);">No qualifying deals.</div></div>`;
+  return `
+    <div class="card">
+      <div class="section-title">${title}</div>
+      <table>
+        <tr>${cols.map(c => `<th>${c.label}</th>`).join('')}</tr>
+        ${rows.map(r => `<tr>${cols.map(c => `<td${c.right ? ' style="text-align:right"' : ''}>${c.fmt ? c.fmt(r[c.key]) : (r[c.key] || '—')}</td>`).join('')}</tr>`).join('')}
+      </table>
+      ${note ? `<div class="note">${note}</div>` : ''}
+    </div>`;
+}
+
+(async function main() {
+  try {
+    const [owners, tagDetail, elevatedDetail] = await Promise.all([
+      loadCSV('./data/09_owner_goals.csv'),
+      loadCSV('./data/10_reporting_tag_detail.csv'),
+      loadCSV('./data/11_elevated_buyer_detail.csv'),
+    ]);
+
+    if (!owners.length) throw new Error('09_owner_goals.csv loaded but has no rows');
+
+    document.getElementById('subtitle').textContent =
+      `Quarter window ${owners[0].quarter_start} – ${owners[0].quarter_end} · as of ${owners[0].as_of_date} · source: local Pipedrive ETL, not Looker Studio`;
+
+    document.getElementById('content').innerHTML = `
+      <div class="owner-grid">${owners.map(ownerCard).join('')}</div>
+
+      <div class="section">
+        <div class="section-title">Attainment &amp; Coverage by Owner</div>
+        <canvas id="attainChart" height="90"></canvas>
+      </div>
+
+      <div class="detail-grid">
+        ${detailTable('Reporting Tag detail — 2Q27 AP Buyer', tagDetail,
+          [{key:'title',label:'Deal'},{key:'owner_name',label:'Owner'},{key:'stage_name',label:'Stage'},{key:'value',label:'Value',right:true,fmt:money}],
+          tagDetail.length ? 'Check whether these are real tagged buyers or test fixtures before trusting this count.' : '')}
+        ${detailTable('Elevated Buyer detail — Pre-Sales', elevatedDetail,
+          [{key:'title',label:'Deal'},{key:'owner_name',label:'Owner'},{key:'stage_name',label:'Stage'},{key:'outbound_meeting_date',label:'Mtg date',right:true,fmt:v=>v||'—'}],
+          '')}
+      </div>
+    `;
+
+    const ctx = document.getElementById('attainChart');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: owners.map(o => o.owner_name),
+        datasets: [
+          { label: 'Sales Attainment %', data: owners.map(o => +pct(o.attainment_pct)), backgroundColor: '#2563eb' },
+          { label: 'Coverage — All Open %', data: owners.map(o => +pct(o.coverage_pct_all)), backgroundColor: '#93c5fd' },
+          { label: 'Coverage — In Window %', data: owners.map(o => +pct(o.coverage_pct_in_window)), backgroundColor: '#fbbf24' },
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } }
+      }
+    });
+  } catch (err) {
+    document.getElementById('content').innerHTML = `<div class="error">Failed to load dashboard data: ${err.message}<br><br>Check that data/09_owner_goals.csv etc. were copied into docs/data/ alongside this file.</div>`;
+  }
+})();
+</script>
+</body>
+</html>

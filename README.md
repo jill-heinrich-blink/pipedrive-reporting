@@ -72,6 +72,34 @@ CSV files are written to `data/exports/`. One file per report:
 2. In Looker Studio: Add data source → Google Sheets → select your sheet.
 3. Build reports using the field definitions in `Pipedrive_Reporting_Specification_v1.docx`.
 
+Note: this path works (verified 2026-08-24) even though Apps Script is disabled
+org-wide — the block is specific to Apps Script/bound scripts, not to Looker
+Studio or the Sheets connector itself. The catch is refresh: with Apps Script
+off, nothing auto-updates the Sheet. For the beta, refresh means manually
+re-importing the CSV (File → Import → Replace current sheet, not a new file —
+replacing in place keeps Looker Studio's data source binding intact).
+
+## Alternative: GitHub Pages dashboard (no Google dependency)
+
+`docs/index.html` is a standalone dashboard (Report 9 — Owner Goals) that
+needs no Google account, Apps Script, or Looker Studio. It fetches
+`docs/data/*.csv` at page load and renders scorecards, a chart, and detail
+tables per owner.
+
+**One-time setup:** push this repo, then in GitHub: Settings → Pages →
+Source: Deploy from branch → `main` / `docs`.
+
+**Refresh cycle:**
+```bash
+python src/run_all.py            # updates data/exports/*.csv
+python src/publish_to_pages.py    # copies the beta exports into docs/data
+git add docs/data && git commit -m "Refresh beta dashboard data" && git push
+```
+GitHub Pages serves whatever's committed — there's no live link to the
+database, so a push is required for the dashboard to show new numbers. This
+sandbox has no GitHub push credentials, so pushes have to happen from a
+machine that does.
+
 ## Key derived fields
 
 | Field | Definition |
