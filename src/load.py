@@ -424,82 +424,107 @@ def export_owner_goals(conn):
         if owner_id_str.startswith("_"):
             continue
         owner_id = int(owner_id_str)
+        combined_ids = cfg.get("combined_with_user_ids", [])
+        combined_names = cfg.get("combined_with_names", [])
+        all_ids = [owner_id] + combined_ids
+        id_ph = ",".join("?" for _ in all_ids)
         goal = cfg["sales_goal"]
 
         sales_actual = conn.execute(f"""
             SELECT COALESCE(SUM(value), 0) FROM deals_transformed
-            WHERE owner_id = ? AND status = 'won'
+            WHERE owner_id IN ({id_ph}) AND status = 'won'
               AND date(won_time) BETWEEN date(?) AND date(?)
-        """, (owner_id, q_start, q_end)).fetchone()[0]
+        """, (*all_ids, q_start, q_end)).fetchone()[0]
 
         open_all = conn.execute(f"""
             SELECT COALESCE(SUM(value), 0) FROM deals_transformed
-            WHERE owner_id = ? AND status = 'open'
+            WHERE owner_id IN ({id_ph}) AND status = 'open'
               AND stage_id NOT IN ({stage_zero_clause})
               AND pipeline_id IN (2, 7, 8)
-        """, (owner_id,)).fetchone()[0]
+        """, all_ids).fetchone()[0]
 
         open_window = conn.execute(f"""
             SELECT COALESCE(SUM(value), 0) FROM deals_transformed
-            WHERE owner_id = ? AND status = 'open'
+            WHERE owner_id IN ({id_ph}) AND status = 'open'
               AND stage_id NOT IN ({stage_zero_clause})
               AND pipeline_id IN (2, 7, 8)
               AND expected_close_date IS NOT NULL AND expected_close_date != ''
               AND date(expected_close_date) BETWEEN date(?) AND date(?)
-        """, (owner_id, today, q_end)).fetchone()[0]
+        """, (*all_ids, today, q_end)).fetchone()[0]
 
         overdue = conn.execute(f"""
             SELECT COUNT(*), COALESCE(SUM(value), 0) FROM deals_transformed
-            WHERE owner_id = ? AND status = 'open'
+            WHERE owner_id IN ({id_ph}) AND status = 'open'
               AND stage_id NOT IN ({stage_zero_clause})
               AND expected_close_date IS NOT NULL AND expected_close_date != ''
               AND date(expected_close_date) < date(?)
-        """, (owner_id, today)).fetchone()
+        """, (*all_ids, today)).fetchone()
 
         no_close_date = conn.execute(f"""
             SELECT COUNT(*) FROM deals_transformed
-            WHERE owner_id = ? AND status = 'open'
+            WHERE owner_id IN ({id_ph}) AND status = 'open'
               AND stage_id NOT IN ({stage_zero_clause})
               AND (expected_close_date IS NULL OR expected_close_date = '')
-        """, (owner_id,)).fetchone()[0]
+        """, all_ids).fetchone()[0]
 
         no_person = conn.execute(f"""
             SELECT COUNT(*) FROM deals_transformed
-            WHERE owner_id = ? AND status = 'open'
+            WHERE owner_id IN ({id_ph}) AND status = 'open'
               AND stage_id NOT IN ({stage_zero_clause})
               AND (person_id IS NULL OR person_id = '')
-        """, (owner_id,)).fetchone()[0]
+        """, all_ids).fetchone()[0]
 
         stage_zero_count = conn.execute(f"""
             SELECT COUNT(*) FROM deals_transformed
-            WHERE owner_id = ? AND status = 'open' AND stage_id IN ({stage_zero_clause})
-        """, (owner_id,)).fetchone()[0]
+            WHERE owner_id IN ({id_ph}) AND status = 'open' AND stage_id IN ({stage_zero_clause})
+        """, all_ids).fetchone()[0]
 
         tag_deals = conn.execute(f"""
             SELECT COUNT(*), COALESCE(SUM(t.value), 0) FROM deals_transformed t
             JOIN dim_persons p ON t.person_id = p.person_id
-            WHERE t.owner_id = ? AND t.status = 'open'
+            WHERE t.owner_id IN ({id_ph}) AND t.status = 'open'
               AND t.stage_id NOT IN ({stage_zero_clause})
               AND p.reporting_tag = ?
-        """, (owner_id, tag_filter)).fetchone()
+        """, (*all_ids, tag_filter)).fetchone()
 
-        elevated_engaged = conn.execute("""
+        elevated_engaged = conn.execute(f"""
             SELECT COUNT(*) FROM deals_transformed t
             JOIN dim_persons p ON t.person_id = p.person_id
             JOIN dim_stages s ON t.stage_id = s.stage_id
-            WHERE t.owner_id = ? AND t.pipeline_id = 10
+            WHERE t.owner_id IN ({id_ph}) AND t.pipeline_id = 10
               AND p.label = ? AND s.name = 'Engaged'
-        """, (owner_id, label_filter)).fetchone()[0]
+        """, (*all_ids, label_filter)).fetchone()[0]
 
-        elevated_mtg = conn.execute("""
+        elevated_mtg = conn.execute(f"""
             SELECT COUNT(*) FROM deals_transformed t
             JOIN dim_persons p ON t.person_id = p.person_id
             JOIN dim_stages s ON t.stage_id = s.stage_id
-            WHERE t.owner_id = ? AND t.pipeline_id = 10
+            WHERE t.owner_id IN ({id_ph}) AND t.pipeline_id = 10
               AND p.label = ? AND s.name = 'Meeting Scheduled'
               AND t.outbound_meeting_date IS NOT NULL AND t.outbound_meeting_date != ''
               AND date(t.outbound_meeting_date) BETWEEN date(?) AND date(?)
-        """, (owner_id, label_filter, today, q_end)).fetchone()[0]
+        """, (*all_ids, label_filter, today, q_end)).fetchone()[0]
+
+        combined_split = None
+        if combined_ids:
+            sub_labels = [cfg.get("name")] + combined_names
+            parts = []
+            for sub_id, sub_label in zip(all_ids, sub_labels):
+                sub_sales = conn.execute("""
+                    SELECT COALESCE(SUM(value), 0) FROM deals_transformed
+                    WHERE owner_id = ? AND status = 'won'
+                      AND date(won_time) BETWEEN date(?) AND date(?)
+                """, (sub_id, q_start, q_end)).fetchone()[0]
+                sub_open_window = conn.execute(f"""
+                    SELECT COALESCE(SUM(value), 0) FROM deals_transformed
+                    WHERE owner_id = ? AND status = 'open'
+                      AND stage_id NOT IN ({stage_zero_clause})
+                      AND pipeline_id IN (2, 7, 8)
+                      AND expected_close_date IS NOT NULL AND expected_close_date != ''
+                      AND date(expected_close_date) BETWEEN date(?) AND date(?)
+                """, (sub_id, today, q_end)).fetchone()[0]
+                parts.append(f"{sub_label}: ${sub_sales:,.0f} sales / ${sub_open_window:,.0f} pipeline in window")
+            combined_split = "; ".join(parts)
 
         coverage_goal = goal * mult
         win_rate = cfg.get("win_rate", 1 / mult if mult else 0.37)
@@ -510,6 +535,8 @@ def export_owner_goals(conn):
         rows.append({
             "owner_id": owner_id,
             "owner_name": cfg.get("name"),
+            "combined_with": "; ".join(combined_names) if combined_names else None,
+            "combined_split": combined_split,
             "sales_goal": goal,
             "sales_goal_source": cfg.get("source"),
             "sales_actual": sales_actual,

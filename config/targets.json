@@ -24,14 +24,17 @@
     },
     "11292917": {
       "name": "Kevin Burzynski",
-      "sales_goal": 1000000,
-      "source": "TEST ASSUMPTION — set to match Albert's goal for beta comparison only, per Jill's instruction on 2026-08-24. Not Kevin's confirmed real target. Replace when known.",
-      "win_rate": 0.37
+      "sales_goal": 2850000,
+      "source": "Updated by Jill Heinrich on 2026-08-26. Combined goal covering Kevin Burzynski and Kendall Dargitz as one BD unit.",
+      "win_rate": 0.37,
+      "combined_with_user_ids": [12177196],
+      "combined_with_names": ["Kendall Dargitz"],
+      "combined_note": "This report combines all deals/pipeline owned by Kevin Burzynski and Kendall Dargitz (Pipedrive user_id 12177196) into one BD unit per Jill's 2026-08-26 instruction. See combined_split in 09_owner_goals.csv for the breakdown between the two."
     },
     "24048584": {
       "name": "Megan Burnett",
-      "sales_goal": 1000000,
-      "source": "TEST ASSUMPTION — $1M placeholder per Jill's 2026-08-26 instruction (all-up assumed at $1M per BD). Not Megan's confirmed real target. Replace when known.",
+      "sales_goal": 800000,
+      "source": "Updated by Jill Heinrich on 2026-08-26.",
       "win_rate": 0.37
     },
     "24731541": {
@@ -48,10 +51,18 @@
     },
     "11292907": {
       "name": "Anne Vande Creek",
-      "sales_goal": 1000000,
-      "source": "TEST ASSUMPTION — $1M placeholder per Jill's 2026-08-26 instruction (all-up assumed at $1M per BD). Not Anne's confirmed real target. Replace when known.",
+      "sales_goal": 3100000,
+      "source": "Updated by Jill Heinrich on 2026-08-26.",
       "win_rate": 0.37
     }
+  },
+
+  "total_sales_target_override": {
+    "_comment": "Jill stated on 2026-08-26 that the total Q3 sales target across all BD is $11,000,000 with $3.4M in progress. The bottom-up sum of the 6 owners configured above is $9,750,000 (Albert 1M + Kevin/Kendall combined 2.85M + Anne 3.1M + Megan 0.8M + Kaylynn 1M test + Kate 1M test) — a $1,250,000 gap versus the stated $11M. The $3.4M progress figure DOES reconcile almost exactly with the bottom-up actuals (Albert 803,574 + Kevin/Kendall combined 1,630,033 + Anne 809,700 + Megan 199,948 + Kaylynn 0 + Kate 0 = $3,443,255), which validates the Kevin+Kendall combination logic. The goal-side gap likely means Kaylynn's and/or Kate's real goals are higher than the $1M placeholder, or there's a 7th BD not yet in this config — flagged for Jill to confirm.",
+    "total_target": 11000000,
+    "total_progress_stated": 3400000,
+    "bottom_up_target_sum": 9750000,
+    "bottom_up_progress_sum": 3443255.21
   },
 
   "win_rate_comment": "Flat 37% blended win rate for all BD per Jill's 2026-08-26 decision (matches the account-plan template's default). 1/0.37 = 2.7, consistent with pipeline_coverage_multiplier above. Override per-owner win_rate once real historical win rates are known.",
