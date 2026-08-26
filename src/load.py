@@ -567,6 +567,45 @@ def export_owner_goals(conn):
             "as_of_date": today,
         })
 
+    for team_key, team_cfg in TARGETS.get("placeholder_teams", {}).items():
+        if team_key.startswith("_"):
+            continue
+        team_goal = team_cfg["sales_goal"]
+        rows.append({
+            "owner_id": None,
+            "owner_name": team_cfg.get("name"),
+            "combined_with": None,
+            "combined_split": None,
+            "sales_goal": team_goal,
+            "sales_goal_source": team_cfg.get("source") + " NO PIPEDRIVE DATA — goal placeholder only.",
+            "sales_actual": 0,
+            "attainment_pct": 0.0,
+            "remaining_goal": team_goal,
+            "win_rate": None,
+            "pipeline_needed": None,
+            "new_pipeline_required": None,
+            "pipeline_coverage_multiplier": None,
+            "coverage_goal": None,
+            "open_pipeline_all": 0,
+            "open_pipeline_in_window": 0,
+            "coverage_pct_all": None,
+            "coverage_pct_in_window": None,
+            "coverage_pct_vs_pipeline_needed": None,
+            "open_deals_overdue_count": None,
+            "open_deals_overdue_value": None,
+            "open_deals_no_close_date_count": None,
+            "open_deals_no_person_count": None,
+            "open_deals_stage_zero_count": None,
+            "reporting_tag_deal_count": None,
+            "reporting_tag_deal_value": None,
+            "elevated_buyer_engaged_count": None,
+            "elevated_buyer_meeting_scheduled_count": None,
+            "elevated_buyer_total_count": None,
+            "quarter_start": q_start,
+            "quarter_end": q_end,
+            "as_of_date": today,
+        })
+
     if not rows:
         log.warning("  09_owner_goals.csv: no owners configured in targets.json")
         return 0

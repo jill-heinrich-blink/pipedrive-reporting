@@ -57,11 +57,20 @@
     }
   },
 
+  "placeholder_teams": {
+    "_comment": "Teams/goals with no Pipedrive user mapping yet — goal-only placeholders. No sales/pipeline data is computed for these; they show as $0 actual until mapped to real Pipedrive users.",
+    "solutions": {
+      "name": "Solutions",
+      "sales_goal": 1000000,
+      "source": "Placeholder goal per Jill Heinrich, 2026-08-26. Solutions is a separate team not yet mapped to specific Pipedrive users — no actual/pipeline data until that mapping is provided."
+    }
+  },
+
   "total_sales_target_override": {
-    "_comment": "Jill stated on 2026-08-26 that the total Q3 sales target across all BD is $11,000,000 with $3.4M in progress. The bottom-up sum of the 6 owners configured above is $9,750,000 (Albert 1M + Kevin/Kendall combined 2.85M + Anne 3.1M + Megan 0.8M + Kaylynn 1M test + Kate 1M test) — a $1,250,000 gap versus the stated $11M. The $3.4M progress figure DOES reconcile almost exactly with the bottom-up actuals (Albert 803,574 + Kevin/Kendall combined 1,630,033 + Anne 809,700 + Megan 199,948 + Kaylynn 0 + Kate 0 = $3,443,255), which validates the Kevin+Kendall combination logic. The goal-side gap likely means Kaylynn's and/or Kate's real goals are higher than the $1M placeholder, or there's a 7th BD not yet in this config — flagged for Jill to confirm.",
+    "_comment": "Jill stated on 2026-08-26 that the total Q3 sales target across all BD is $11,000,000 with $3.4M in progress. Bottom-up sum: 6 BD owners ($9,750,000: Albert 1M + Kevin/Kendall combined 2.85M + Anne 3.1M + Megan 0.8M + Kaylynn 1M test + Kate 1M test) + Solutions placeholder ($1,000,000) = $10,750,000 — still a $250,000 gap versus the stated $11M. The $3.4M progress figure DOES reconcile almost exactly with the bottom-up actuals (Albert 803,574 + Kevin/Kendall combined 1,630,033 + Anne 809,700 + Megan 199,948 + Kaylynn 0 + Kate 0 + Solutions 0 = $3,443,255), which validates the Kevin+Kendall combination logic. The remaining $250,000 goal-side gap likely means Kaylynn's or Kate's real goals are slightly higher than the $1M placeholder, or Solutions' real goal is slightly above $1M — flagged for Jill to confirm.",
     "total_target": 11000000,
     "total_progress_stated": 3400000,
-    "bottom_up_target_sum": 9750000,
+    "bottom_up_target_sum": 10750000,
     "bottom_up_progress_sum": 3443255.21
   },
 
