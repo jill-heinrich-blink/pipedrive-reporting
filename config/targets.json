@@ -58,11 +58,15 @@
   },
 
   "placeholder_teams": {
-    "_comment": "Teams/goals with no Pipedrive user mapping yet — goal-only placeholders. No sales/pipeline data is computed for these; they show as $0 actual until mapped to real Pipedrive users.",
+    "_comment": "Teams/goals with no Pipedrive user mapping yet. If a team has 'dynamic_group', its sales/pipeline are computed as 'all deal owners in the given pipeline who are NOT in the named BD owners list' — a proxy, not a real team roster. Otherwise it's a pure $0-actual goal placeholder.",
     "solutions": {
       "name": "Solutions",
       "sales_goal": 1000000,
-      "source": "Placeholder goal per Jill Heinrich, 2026-08-26. Solutions is a separate team not yet mapped to specific Pipedrive users — no actual/pipeline data until that mapping is provided."
+      "source": "Placeholder goal per Jill Heinrich, 2026-08-26. Progress computed per Jill's 2026-08-26 instruction as all deal owners in the Synergy pipeline (pipeline_id 7) who are not one of the named BD owners above. This is a proxy for the Solutions team, not a confirmed roster — it currently sweeps in ~24 distinct owners including some who are clearly not Solutions BD (e.g. Jill Heinrich herself, and what look like founder/leadership accounts such as Byron Baker and Kelly Franznick). Flagged for Jill to confirm or refine the owner list.",
+      "dynamic_group": {
+        "pipeline_id": 7,
+        "exclude_owner_ids": [24121734, 11292917, 12177196, 24048584, 24731541, 26066809, 11292907]
+      }
     }
   },
 

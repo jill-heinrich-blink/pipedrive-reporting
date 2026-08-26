@@ -571,6 +571,80 @@ def export_owner_goals(conn):
         if team_key.startswith("_"):
             continue
         team_goal = team_cfg["sales_goal"]
+        dyn = team_cfg.get("dynamic_group")
+
+        if dyn:
+            dyn_pipeline_id = dyn["pipeline_id"]
+            excl_ids = dyn["exclude_owner_ids"]
+            excl_ph = ",".join("?" for _ in excl_ids)
+
+            distinct_owners = conn.execute(f"""
+                SELECT DISTINCT owner_id FROM deals_transformed
+                WHERE pipeline_id = ? AND owner_id NOT IN ({excl_ph}) AND owner_id IS NOT NULL
+            """, (dyn_pipeline_id, *excl_ids)).fetchall()
+            owner_count = len(distinct_owners)
+
+            team_sales_actual = conn.execute(f"""
+                SELECT COALESCE(SUM(value), 0) FROM deals_transformed
+                WHERE pipeline_id = ? AND owner_id NOT IN ({excl_ph})
+                  AND status = 'won' AND date(won_time) BETWEEN date(?) AND date(?)
+            """, (dyn_pipeline_id, *excl_ids, q_start, q_end)).fetchone()[0]
+
+            team_open_all = conn.execute(f"""
+                SELECT COALESCE(SUM(value), 0) FROM deals_transformed
+                WHERE pipeline_id = ? AND owner_id NOT IN ({excl_ph})
+                  AND status = 'open' AND stage_id NOT IN ({stage_zero_clause})
+            """, (dyn_pipeline_id, *excl_ids)).fetchone()[0]
+
+            team_open_window = conn.execute(f"""
+                SELECT COALESCE(SUM(value), 0) FROM deals_transformed
+                WHERE pipeline_id = ? AND owner_id NOT IN ({excl_ph})
+                  AND status = 'open' AND stage_id NOT IN ({stage_zero_clause})
+                  AND expected_close_date IS NOT NULL AND expected_close_date != ''
+                  AND date(expected_close_date) BETWEEN date(?) AND date(?)
+            """, (dyn_pipeline_id, *excl_ids, today, q_end)).fetchone()[0]
+
+            team_win_rate = team_cfg.get("win_rate", 0.37)
+            team_remaining_goal = max(team_goal - team_sales_actual, 0)
+            team_pipeline_needed = round(team_remaining_goal / team_win_rate, 2) if team_win_rate else None
+            team_new_pipeline_required = max(round(team_pipeline_needed - team_open_window, 2), 0) if team_pipeline_needed is not None else None
+
+            rows.append({
+                "owner_id": None,
+                "owner_name": team_cfg.get("name"),
+                "combined_with": f"{owner_count} distinct Synergy deal owners not on the named BD list (proxy group, not a confirmed roster)",
+                "combined_split": None,
+                "sales_goal": team_goal,
+                "sales_goal_source": team_cfg.get("source"),
+                "sales_actual": team_sales_actual,
+                "attainment_pct": round(team_sales_actual / team_goal, 4) if team_goal else None,
+                "remaining_goal": team_remaining_goal,
+                "win_rate": team_win_rate,
+                "pipeline_needed": team_pipeline_needed,
+                "new_pipeline_required": team_new_pipeline_required,
+                "pipeline_coverage_multiplier": round(1 / team_win_rate, 3) if team_win_rate else None,
+                "coverage_goal": None,
+                "open_pipeline_all": team_open_all,
+                "open_pipeline_in_window": team_open_window,
+                "coverage_pct_all": None,
+                "coverage_pct_in_window": None,
+                "coverage_pct_vs_pipeline_needed": round(team_open_window / team_pipeline_needed, 4) if team_pipeline_needed else None,
+                "open_deals_overdue_count": None,
+                "open_deals_overdue_value": None,
+                "open_deals_no_close_date_count": None,
+                "open_deals_no_person_count": None,
+                "open_deals_stage_zero_count": None,
+                "reporting_tag_deal_count": None,
+                "reporting_tag_deal_value": None,
+                "elevated_buyer_engaged_count": None,
+                "elevated_buyer_meeting_scheduled_count": None,
+                "elevated_buyer_total_count": None,
+                "quarter_start": q_start,
+                "quarter_end": q_end,
+                "as_of_date": today,
+            })
+            continue
+
         rows.append({
             "owner_id": None,
             "owner_name": team_cfg.get("name"),

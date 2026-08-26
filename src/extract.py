@@ -174,7 +174,9 @@ class PipedriveClient:
         """
         params = {"status": status}
         if updated_after:
-            params["update_time"] = updated_after
+            # v2 /deals uses "updated_since" (not v1's "update_time"), and expects
+            # RFC3339 with a "Z" suffix — no fractional seconds or "+00:00" offset.
+            params["updated_since"] = updated_after
         log.info(f"Fetching {status} deals...")
         deals = self.get_all_pages(f"{API_BASE}/v2/deals", params)
         log.info(f"  → {len(deals)} {status} deals")
@@ -702,7 +704,8 @@ def run_incremental(client: PipedriveClient, conn: sqlite3.Connection) -> dict:
     if cutoff:
         # Subtract 1 hour buffer to handle clock skew
         dt = datetime.fromisoformat(cutoff) - timedelta(hours=1)
-        cutoff = dt.isoformat()
+        # RFC3339 as Pipedrive's v2 API expects it: no fractional seconds, "Z" suffix.
+        cutoff = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         log.info(f"  Incremental since: {cutoff}")
     else:
         log.info("  No previous run found — falling back to full extraction")
