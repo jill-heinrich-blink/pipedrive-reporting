@@ -24,6 +24,8 @@ FILES = [
     "10_reporting_tag_detail.csv",
     "11_elevated_buyer_detail.csv",
     "12_account_coverage.csv",
+    "13_account_coverage_detail.csv",
+    "14_ap_buyer_targets.csv",
 ]
 
 

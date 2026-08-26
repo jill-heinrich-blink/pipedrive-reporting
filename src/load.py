@@ -502,6 +502,11 @@ def export_owner_goals(conn):
         """, (owner_id, label_filter, today, q_end)).fetchone()[0]
 
         coverage_goal = goal * mult
+        win_rate = cfg.get("win_rate", 1 / mult if mult else 0.37)
+        remaining_goal = max(goal - sales_actual, 0)
+        pipeline_needed = round(remaining_goal / win_rate, 2) if win_rate else None
+        new_pipeline_required = max(round(pipeline_needed - open_window, 2), 0) if pipeline_needed is not None else None
+
         rows.append({
             "owner_id": owner_id,
             "owner_name": cfg.get("name"),
@@ -509,12 +514,17 @@ def export_owner_goals(conn):
             "sales_goal_source": cfg.get("source"),
             "sales_actual": sales_actual,
             "attainment_pct": round(sales_actual / goal, 4) if goal else None,
+            "remaining_goal": remaining_goal,
+            "win_rate": win_rate,
+            "pipeline_needed": pipeline_needed,
+            "new_pipeline_required": new_pipeline_required,
             "pipeline_coverage_multiplier": mult,
             "coverage_goal": coverage_goal,
             "open_pipeline_all": open_all,
             "open_pipeline_in_window": open_window,
             "coverage_pct_all": round(open_all / coverage_goal, 4) if coverage_goal else None,
             "coverage_pct_in_window": round(open_window / coverage_goal, 4) if coverage_goal else None,
+            "coverage_pct_vs_pipeline_needed": round(open_window / pipeline_needed, 4) if pipeline_needed else None,
             "open_deals_overdue_count": overdue[0],
             "open_deals_overdue_value": overdue[1],
             "open_deals_no_close_date_count": no_close_date,
@@ -606,6 +616,133 @@ def export_account_coverage(conn):
     return len(out_rows)
 
 
+def export_account_coverage_detail(conn):
+    """
+    Report 13: Account Coverage detail — the individual deals behind each
+    org bar in the Open Pipeline vs. Closed Sales chart (Report 12). One row
+    per deal, so the dashboard can show a click-through list: deal name,
+    value, close date, and a link to open the deal in Pipedrive.
+    """
+    q_start = TARGETS["quarter_start"]
+    q_end   = TARGETS["quarter_end"]
+    today = date.today().isoformat()
+    stage_zero_ids = TARGETS["stage_zero_exclusion"]["stage_ids"]
+    stage_zero_clause = ",".join(str(s) for s in stage_zero_ids)
+    owner_ids = [int(k) for k in TARGETS["owners"] if not k.startswith("_")]
+    placeholders = ",".join("?" for _ in owner_ids)
+    pipedrive_domain = TARGETS.get("pipedrive_domain", "blinkux.pipedrive.com")
+
+    rows = conn.execute(f"""
+        SELECT
+            t.deal_id,
+            t.title,
+            t.owner_id,
+            t.org_id,
+            COALESCE(o.name, '(no organization linked)') AS org_name,
+            t.value,
+            t.status,
+            t.expected_close_date,
+            t.won_time
+        FROM deals_transformed t
+        LEFT JOIN dim_organizations o ON t.org_id = o.org_id
+        WHERE t.owner_id IN ({placeholders})
+          AND t.org_id IS NOT NULL
+          AND (
+                (t.status = 'won' AND date(t.won_time) BETWEEN date(?) AND date(?))
+             OR (t.status = 'open' AND t.stage_id NOT IN ({stage_zero_clause})
+                 AND t.pipeline_id IN (2,7,8)
+                 AND t.expected_close_date IS NOT NULL AND t.expected_close_date != ''
+                 AND date(t.expected_close_date) BETWEEN date(?) AND date(?))
+              )
+        ORDER BY t.owner_id, t.org_id, t.status, t.value DESC
+    """, (*owner_ids, q_start, q_end, today, q_end)).fetchall()
+
+    out_rows = []
+    for r in rows:
+        owner_cfg = TARGETS["owners"].get(str(r["owner_id"]), {})
+        close_date = r["won_time"] if r["status"] == "won" else r["expected_close_date"]
+        out_rows.append({
+            "owner_name": owner_cfg.get("name", str(r["owner_id"])),
+            "org_name": r["org_name"],
+            "org_id": r["org_id"],
+            "deal_id": r["deal_id"],
+            "title": r["title"],
+            "status": r["status"],
+            "value": r["value"],
+            "close_date": close_date,
+            "pipedrive_url": f"https://{pipedrive_domain}/deal/{r['deal_id']}",
+        })
+
+    if not out_rows:
+        log.warning("  13_account_coverage_detail.csv: no rows")
+        return 0
+    path = EXPORT_DIR / "13_account_coverage_detail.csv"
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=out_rows[0].keys())
+        writer.writeheader()
+        writer.writerows(out_rows)
+    log.info(f"  13_account_coverage_detail.csv: {len(out_rows)} rows → {path}")
+    return len(out_rows)
+
+
+def export_ap_buyer_targets(conn):
+    """
+    Report 14: AP Buyer target vs. actual — per named buyer from each owner's
+    account plan (config/targets.json → ap_buyer_targets), matched against
+    actual Pipedrive activity by person name. Targets live in account-plan
+    documents, not Pipedrive, so they're maintained by hand until a better
+    capture mechanism exists.
+    """
+    q_start = TARGETS["quarter_start"]
+    q_end   = TARGETS["quarter_end"]
+    ap_targets = TARGETS.get("ap_buyer_targets", {})
+
+    out_rows = []
+    for owner_id_str, cfg in TARGETS["owners"].items():
+        if owner_id_str.startswith("_"):
+            continue
+        owner_id = int(owner_id_str)
+        for target in ap_targets.get(owner_id_str, []):
+            buyer_name = target["buyer"].split(" (")[0]  # strip "(TEST FIXTURE)" etc. for matching
+
+            actual = conn.execute("""
+                SELECT
+                    COALESCE(SUM(CASE WHEN t.status='open' THEN t.value ELSE 0 END), 0) AS actual_pipeline,
+                    COALESCE(SUM(CASE WHEN t.status='won' AND date(t.won_time) BETWEEN date(?) AND date(?)
+                                  THEN t.value ELSE 0 END), 0) AS actual_sales,
+                    GROUP_CONCAT(DISTINCT s.name) AS stages,
+                    COUNT(*) AS deal_count
+                FROM deals_transformed t
+                JOIN dim_persons p ON t.person_id = p.person_id
+                LEFT JOIN dim_stages s ON t.stage_id = s.stage_id
+                WHERE t.owner_id = ? AND p.name = ?
+                  AND t.status IN ('open', 'won')
+            """, (q_start, q_end, owner_id, buyer_name)).fetchone()
+
+            out_rows.append({
+                "owner_name": cfg.get("name"),
+                "buyer": target["buyer"],
+                "target_source": target.get("source", ""),
+                "expected_pipeline": target["expected_pipeline"],
+                "expected_sales": target["expected_sales"],
+                "actual_pipeline": actual["actual_pipeline"],
+                "actual_sales": actual["actual_sales"],
+                "current_stages": actual["stages"] or "(no matching deals)",
+                "matching_deal_count": actual["deal_count"],
+            })
+
+    if not out_rows:
+        log.warning("  14_ap_buyer_targets.csv: no rows")
+        return 0
+    path = EXPORT_DIR / "14_ap_buyer_targets.csv"
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=out_rows[0].keys())
+        writer.writeheader()
+        writer.writerows(out_rows)
+    log.info(f"  14_ap_buyer_targets.csv: {len(out_rows)} rows → {path}")
+    return len(out_rows)
+
+
 def export_reporting_tag_detail(conn):
     """Report 10 (detail): the actual open deals behind the Reporting Tag count."""
     tag_filter = TARGETS["reporting_tag_filter"]
@@ -687,6 +824,8 @@ def main():
     export_forecast_confidence(conn)
     export_owner_goals(conn)
     export_account_coverage(conn)
+    export_account_coverage_detail(conn)
+    export_ap_buyer_targets(conn)
     export_reporting_tag_detail(conn)
     export_elevated_buyer_detail(conn)
     export_metadata(conn)

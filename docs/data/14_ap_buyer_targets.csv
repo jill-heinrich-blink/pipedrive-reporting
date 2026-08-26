@@ -1,0 +1,2 @@
+owner_name,buyer,target_source,expected_pipeline,expected_sales,actual_pipeline,actual_sales,current_stages,matching_deal_count
+Albert Thibault,Jill Heinrich (TEST FIXTURE),"TEST DATA — not a real buyer target, for beta preview only",100000,40000,1.0,0,"Meeting Scheduled,3 - Proposal Submission",2

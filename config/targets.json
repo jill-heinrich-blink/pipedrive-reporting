@@ -12,18 +12,31 @@
 
   "reporting_tag_filter": "2Q27 AP Buyer",
   "elevated_buyer_label": "Elevated Buyer",
+  "pipedrive_domain": "blinkux.pipedrive.com",
 
   "owners": {
     "_comment": "Keyed by Pipedrive user_id, not name — Albert's Pipedrive user profile name field is his email address (albert.thibault@blinkux.com), not a display name, so name-matching would silently break for him.",
     "24121734": {
       "name": "Albert Thibault",
       "sales_goal": 1000000,
-      "source": "Stated by Jill Heinrich as Albert's Q3 sales target."
+      "source": "Stated by Jill Heinrich as Albert's Q3 sales target.",
+      "win_rate": 0.37
     },
     "11292917": {
       "name": "Kevin Burzynski",
       "sales_goal": 1000000,
-      "source": "TEST ASSUMPTION — set to match Albert's goal for beta comparison only, per Jill's instruction on 2026-08-24. Not Kevin's confirmed real target. Replace when known."
+      "source": "TEST ASSUMPTION — set to match Albert's goal for beta comparison only, per Jill's instruction on 2026-08-24. Not Kevin's confirmed real target. Replace when known.",
+      "win_rate": 0.37
     }
+  },
+
+  "win_rate_comment": "Flat 37% blended win rate for all BD per Jill's 2026-08-26 decision (matches the account-plan template's default). 1/0.37 = 2.7, consistent with pipeline_coverage_multiplier above. Override per-owner win_rate once real historical win rates are known.",
+
+  "ap_buyer_targets": {
+    "_comment": "Per-buyer AP Buyer targets from individual account plans (expected pipeline / expected sales by EOQ). These live in account-plan documents, not Pipedrive, so they're maintained here by hand. Matched to actual Pipedrive activity by person name. Only Albert has a target today (his Jill Heinrich test fixture) — real targets from account plans still need to be collected per BD.",
+    "24121734": [
+      { "buyer": "Jill Heinrich (TEST FIXTURE)", "source": "TEST DATA — not a real buyer target, for beta preview only", "expected_pipeline": 100000, "expected_sales": 40000 }
+    ],
+    "11292917": []
   }
 }
