@@ -1,4 +1,12 @@
 owner_name,org_name,org_id,deal_id,title,status,value,close_date,pipedrive_url
+Anne Vande Creek,Amazon Worldwide Consumer,17631,23196,Amazon Leo Open Labs FY27,won,400000.0,2026-08-05T23:51:50Z,https://blinkux.pipedrive.com/deal/23196
+Anne Vande Creek,Meta Platforms Inc.,25062,23195,Meta Smart Glasses RR 2026 H2 - Jess/Pavitra,open,312000.0,2026-09-30,https://blinkux.pipedrive.com/deal/23195
+Anne Vande Creek,Meta Platforms Inc.,25062,23228,Meta VR Hardware UXR (H2) - Judy,open,120000.0,2026-09-30,https://blinkux.pipedrive.com/deal/23228
+Anne Vande Creek,Meta Platforms Inc.,25062,23544,Meta Inputs Mocap R2 - Ryan,open,55000.0,2026-09-30,https://blinkux.pipedrive.com/deal/23544
+Anne Vande Creek,Meta Platforms Inc.,25062,24210,Meta Instagram Edits Research,won,86000.0,2026-08-07T18:24:15Z,https://blinkux.pipedrive.com/deal/24210
+Anne Vande Creek,Lenovo,25408,23223,Lenovo - Envisioning,won,260300.0,2026-07-10T17:59:35Z,https://blinkux.pipedrive.com/deal/23223
+Anne Vande Creek,Nextdoor,29388,23539,Nextdoor - Motion consulting,won,38380.0,2026-07-30T23:10:35Z,https://blinkux.pipedrive.com/deal/23539
+Anne Vande Creek,Nextdoor,29388,24201,Nextdoor Motion - 2 weeks Extension 7,won,25020.0,2026-08-05T23:53:14Z,https://blinkux.pipedrive.com/deal/24201
 Kevin Burzynski,"QUALCOMM, Inc.",17658,23202,QUALCOMM - Investor Site Revamp,won,200000.0,2026-07-02T16:57:45Z,https://blinkux.pipedrive.com/deal/23202
 Kevin Burzynski,Google,17718,23535,Google - Consumer Shopping Rolling Research (Alex M),open,252788.0,2026-09-30,https://blinkux.pipedrive.com/deal/23535
 Kevin Burzynski,Google,17718,24170,UXRPS9948 Diary Study [Exploring Personalization]  (Pongkhi),open,139784.0,2026-08-31,https://blinkux.pipedrive.com/deal/24170
@@ -10,6 +18,10 @@ Kevin Burzynski,Google,17718,23492,Google Dedicated - WS Media Extension 1 (Shan
 Kevin Burzynski,"Morgan, Lewis & Bockius LLP",18297,24169,Morgan Lewis - Caroline Backfill (6 month Sr. Designer),open,150540.0,2026-08-31,https://blinkux.pipedrive.com/deal/24169
 Kevin Burzynski,Avangrid,24600,24171,Avangrid - 2026 3 year Partnership PO - August-December 2026,won,243448.21,2026-08-12T17:34:17Z,https://blinkux.pipedrive.com/deal/24171
 Kevin Burzynski,Avangrid,24600,23331,Avangrid Accelerator Workshop 2026,won,35000.0,2026-07-06T18:25:30Z,https://blinkux.pipedrive.com/deal/23331
+Megan Burnett,BCBS of Massachusetts,27540,24175,BCBS MA_CIO Report Design,won,121111.0,2026-08-20T16:00:34Z,https://blinkux.pipedrive.com/deal/24175
+Megan Burnett,Vivi,30797,23497,Vivi Research,won,78837.0,2026-08-19T15:13:39Z,https://blinkux.pipedrive.com/deal/23497
+Megan Burnett,BCBS MN,30800,23501,BCBS MN Employer Portal,open,136680.0,2026-08-31,https://blinkux.pipedrive.com/deal/23501
+Megan Burnett,BCBS MN,30800,23518,Bill Presentment & Payment,open,136680.0,2026-08-31,https://blinkux.pipedrive.com/deal/23518
 Albert Thibault,Fiserv,18056,23327,Fiserv Embedded Project Manager Katie Hogan-Hugues,won,271523.0,2026-08-17T17:15:27Z,https://blinkux.pipedrive.com/deal/23327
 Albert Thibault,JP Morgan Chase (JPMC),21175,24212,JPMC AI Design System,open,300000.0,2026-09-04,https://blinkux.pipedrive.com/deal/24212
 Albert Thibault,JP Morgan Chase (JPMC),21175,24166,JPMC Embedded UXR Maria Medlarz (backfill J Lankford),won,256547.0,2026-08-10T17:33:24Z,https://blinkux.pipedrive.com/deal/24166
@@ -19,3 +31,4 @@ Albert Thibault,BNY Mellon,28755,23508,BNY Extension 3 months Aug 1-Oct 31 Scott
 Albert Thibault,Apollo,29563,24213,Apollo Embedded UXD Brienne Moore,open,340000.0,2026-08-31,https://blinkux.pipedrive.com/deal/24213
 Albert Thibault,Apollo,29563,24191,Apollo Embedded Extension 8/3 - 10/31/26 Rich Robinson,won,89024.0,2026-07-31T15:53:08Z,https://blinkux.pipedrive.com/deal/24191
 Albert Thibault,Material+,30532,23200,Product Design (part of larger Mphasis engagement),open,200000.0,2026-09-30,https://blinkux.pipedrive.com/deal/23200
+Kaylynn Kelley,Fanatics,30799,24168,Fanatics TCG Studio Initial Study,open,69000.0,2026-09-04,https://blinkux.pipedrive.com/deal/24168
